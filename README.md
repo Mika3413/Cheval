@@ -2,8 +2,20 @@
 
 Jeu Android d'élevage et d'équitation **réaliste** : vous dirigez un haras sur la côte normande. Vous soignez, nourrissez, pansez, montez, entraînez, faites saillir et vendez vos chevaux, et vous les menez du concours Club au Grand Prix.
 
-![Menu](docs/screenshots/01_menu.png)
-![Le domaine au soleil couchant](docs/screenshots/04_domaine_soir.png)
+![Le domaine](docs/screenshots/05_domaine_paddocks.png)
+
+## Comme Horses of Hoofprint Bay… en plus poussé
+
+- **Style illustré** : carte du domaine en vue de trois quarts, encre et aquarelle, interface en planches de bois et parchemins.
+- **Journée de travail** de 7 h à 21 h : chaque action prend du temps, puis « Nouvelle journée » et le rapport de la nuit.
+- **Domaine à l'abandon** au départ : caravane, vieil abri de 2 boxes, déchets à débarrasser, bâtiments à restaurer sur la carte.
+- **Objectifs** récompensés (23 étapes, du premier pansage au Grand Prix), **cours d'équitation** à donner, stats de **Force** et **Confiance**.
+- **Chevaux vivants au paddock** : promenade, demi-tours, troupeau qui reste groupé, poulains qui suivent leur mère, sieste couchée la nuit.
+- **10 modes de monte** : balade, dressage (figures et cadence), CSO, hunter, cross, course de galop, trot attelé au sulky, endurance, barrel race western, travail sur le plat.
+
+![Début de partie](docs/screenshots/03_domaine_debut.png)
+![Trot attelé](docs/screenshots/12b_trot_attele.png)
+![Dressage](docs/screenshots/12_dressage.png)
 
 ## Le cheval, au cœur du réalisme
 

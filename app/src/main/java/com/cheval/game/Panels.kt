@@ -110,7 +110,8 @@ class CompetitionScreen(app: GameView) : PanelScreen(app, "Concours") {
     private fun calendar(c: Canvas, area: RectF) {
         val u = gui.u
         val discs = listOf<Discipline?>(null) + Discipline.values()
-        for ((i, d) in discs.withIndex()) gui.button(c, RectF(area.left + i * 82f * u, area.top, area.left + i * 82f * u + 78f * u, area.top + 22f * u), d?.short ?: "Tous", if (filter == d) Btn.GOLD else Btn.GHOST, size = 9.5f) { filter = d }
+        val fw = area.width() / discs.size
+        for ((i, d) in discs.withIndex()) gui.button(c, RectF(area.left + i * fw, area.top, area.left + (i + 1) * fw - 4f * u, area.top + 22f * u), d?.short ?: "Tous", if (filter == d) Btn.GOLD else Btn.GHOST, size = 9.5f) { filter = d }
         val evs = game.events.filter { !it.done && it.day >= game.day && (filter == null || it.discipline == filter) }.sortedBy { it.day }
         val list = RectF(area.left, area.top + 28f * u, area.right, area.bottom)
         gui.beginScroll(c, "cal", list, evs.size * 44f * u + 10f * u)

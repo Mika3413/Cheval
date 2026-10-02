@@ -155,6 +155,8 @@ object Scenery {
         path.lineTo(w, baseY + 2f); path.close()
         p.shader = null; p.color = col
         c.drawPath(path, p)
+        c.save(); c.clipPath(path); Ink.grain(c, RectF(0f, baseY - height * 2f, w, baseY + 4f), 110); c.restore()
+        c.drawPath(path, Ink.stroke(HorseArt.alpha(Ink.INK, 0.45f), 1.4f))
     }
 
     /** La mer de la baie, avec reflets et vagues. */
@@ -179,28 +181,22 @@ object Scenery {
     }
 
     fun tree(c: Canvas, x: Float, ground: Float, size: Float, amb: Ambience, seed: Int, poplar: Boolean = false) {
-        val trunk = lit(Color.rgb(84, 62, 44), amb)
-        p.shader = null; p.color = trunk
-        c.drawRect(x - size * 0.05f, ground - size * 0.6f, x + size * 0.05f, ground, p)
-        val col = lit(foliage(amb, seed), amb)
+        val k = size / 80f
+        val trunk = lit(Color.rgb(110, 84, 60), amb)
+        path.reset(); path.moveTo(x - size * 0.06f, ground); path.lineTo(x - size * 0.035f, ground - size * 0.65f); path.lineTo(x + size * 0.04f, ground - size * 0.65f); path.lineTo(x + size * 0.07f, ground); path.close()
+        Ink.wash(c, path, trunk, 1.2f * k, 0.3f, 60)
         val rr = Rng(seed.toLong())
         if (amb.season == Season.HIVER && !poplar) {
-            sp.color = trunk; sp.strokeWidth = size * 0.025f
-            repeat(7) { val a = -PI.toFloat() / 2 + rr.range(-0.9f, 0.9f); val l = size * rr.range(0.3f, 0.55f); c.drawLine(x, ground - size * 0.5f, x + cos(a) * l, ground - size * 0.5f + sin(a) * l, sp) }
+            repeat(7) { val a = -PI.toFloat() / 2 + rr.range(-0.9f, 0.9f); val l = size * rr.range(0.3f, 0.55f); Ink.line(c, x, ground - size * 0.5f, x + cos(a) * l, ground - size * 0.5f + sin(a) * l, 1.4f * k, trunk) }
             return
         }
-        if (poplar) {
-            p.color = col; c.drawOval(x - size * 0.16f, ground - size * 1.35f, x + size * 0.16f, ground - size * 0.25f, p)
-            p.color = HorseArt.alpha(Color.BLACK, 0.15f); c.drawOval(x, ground - size * 1.25f, x + size * 0.15f, ground - size * 0.3f, p)
-            return
+        val col = lit(foliage(amb, seed), amb)
+        if (poplar) { Ink.wash(c, Ink.blobPath(x, ground - size * 0.85f, size * 0.17f, size * 0.55f, seed.toLong(), 8, 0.12f), col, 1.2f * k, 0.3f, 120); return }
+        for (b2 in 0 until 3) {
+            val bx = x + rr.range(-0.3f, 0.3f) * size; val by = ground - size * rr.range(0.8f, 1.05f)
+            Ink.wash(c, Ink.blobPath(bx, by, size * rr.range(0.36f, 0.48f), size * rr.range(0.3f, 0.4f), rr.nextLong(), 9, 0.25f), HorseArt.shade(col, rr.range(0.9f, 1.08f)), 1.3f * k, 0.3f, 120)
         }
-        for (k in 0 until 6) {
-            val ox = rr.range(-0.35f, 0.35f) * size; val oy = rr.range(-0.95f, -0.55f) * size
-            p.color = HorseArt.shade(col, rr.range(0.85f, 1.1f))
-            c.drawCircle(x + ox, ground + oy, size * rr.range(0.25f, 0.38f), p)
-        }
-        p.color = HorseArt.alpha(Color.BLACK, 0.12f)
-        c.drawCircle(x + size * 0.15f, ground - size * 0.6f, size * 0.3f, p)
+        c.drawPath(Ink.blobPath(x - size * 0.15f, ground - size * 1.05f, size * 0.16f, size * 0.1f, seed * 3L, 6, 0.3f), Ink.fill(HorseArt.alpha(Color.rgb(230, 240, 180), 0.3f)))
     }
 
     fun hedge(c: Canvas, x0: Float, x1: Float, y: Float, hgt: Float, amb: Ambience) {

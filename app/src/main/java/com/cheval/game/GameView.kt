@@ -125,8 +125,7 @@ class GameView(context: Context) : View(context) {
     /** Fait avancer le temps de jeu (appelé par les écrans « vivants »). */
     fun tickGame(dt: Float) {
         val g = game ?: return
-        val sp = speeds[timeSpeed.coerceIn(0, speeds.size - 1)]
-        if (sp > 0f) g.advance((dt * sp).toDouble())
+        // Le temps avance au rythme des actions du joueur (journée de travail), plus en continu.
         if (g.day != lastSavedDay) { lastSavedDay = g.day; save() }
     }
 

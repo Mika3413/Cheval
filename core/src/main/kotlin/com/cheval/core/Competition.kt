@@ -15,6 +15,10 @@ object Levels {
     val ENDURANCE = arrayOf("Club 20 km", "Amateur 40 km", "Amateur 90 km", "CEI 2* 120 km", "CEI 3* 160 km", "Championnat 160 km")
     val ATTELAGE = arrayOf("Club", "Amateur 2", "Amateur 1", "Pro 2", "Pro 1", "CAI 3*")
     val MODELE = arrayOf("Concours local", "Concours départemental", "Concours régional", "Finale nationale", "Championnat de France", "Championnat du monde des jeunes chevaux")
+    val HUNTER = arrayOf("Club (0,80 m)", "Amateur 2 (0,95 m)", "Amateur 1 (1,05 m)", "Pro 2 (1,15 m)", "Pro 1 (1,20 m)", "Derby Hunter (1,30 m)")
+    val HUNTER_HEIGHT = floatArrayOf(0.8f, 0.95f, 1.05f, 1.15f, 1.2f, 1.3f)
+    val TROT = arrayOf("Course de province", "Prix de semi-classique", "Course européenne", "Groupe III — Vincennes", "Groupe II — Vincennes", "Groupe I — Prix d'Amérique")
+    val WESTERN = arrayOf("Club", "Amateur", "Open", "Championnat régional", "Championnat de France", "Finale européenne")
     /** Niveau de compétence attendu par niveau (moyenne des concurrents). */
     val EXPECT = floatArrayOf(24f, 38f, 50f, 62f, 74f, 86f)
     val FEE = intArrayOf(25, 55, 110, 220, 450, 900)
@@ -25,9 +29,10 @@ object Levels {
     fun name(d: Discipline, l: Int): String = when (d) {
         Discipline.CSO -> CSO[l]; Discipline.DRESSAGE -> DRESSAGE[l]; Discipline.COMPLET -> COMPLET[l]
         Discipline.COURSE -> COURSE[l]; Discipline.ENDURANCE -> ENDURANCE[l]; Discipline.ATTELAGE -> ATTELAGE[l]; Discipline.MODELE -> MODELE[l]
+        Discipline.HUNTER -> HUNTER[l]; Discipline.TROT_ATTELE -> TROT[l]; Discipline.WESTERN -> WESTERN[l]
     }
 
-    fun prizeMultiplier(d: Discipline) = when (d) { Discipline.COURSE -> 2.2f; Discipline.MODELE -> 0.4f; Discipline.ENDURANCE -> 0.7f; Discipline.ATTELAGE -> 0.6f; else -> 1f }
+    fun prizeMultiplier(d: Discipline) = when (d) { Discipline.COURSE -> 2.2f; Discipline.MODELE -> 0.4f; Discipline.ENDURANCE -> 0.7f; Discipline.ATTELAGE -> 0.6f; Discipline.TROT_ATTELE -> 1.8f; Discipline.HUNTER -> 0.6f; Discipline.WESTERN -> 0.7f; else -> 1f }
 }
 
 class CompEvent(
@@ -37,7 +42,7 @@ class CompEvent(
     val entries = ArrayList<Entry>()
     var done = false
     val name get() = "${Levels.name(discipline, level)} — $venue"
-    val fee get() = (Levels.FEE[level] * (if (discipline == Discipline.COURSE) 2f else if (discipline == Discipline.MODELE) 0.6f else 1f)).toInt()
+    val fee get() = (Levels.FEE[level] * (if (discipline == Discipline.COURSE || discipline == Discipline.TROT_ATTELE) 2f else if (discipline == Discipline.MODELE) 0.6f else 1f)).toInt()
     val firstPrize get() = (Levels.PRIZE1[level] * Levels.prizeMultiplier(discipline)).toInt()
 
     /** Conditions d'âge réalistes. */
@@ -45,6 +50,8 @@ class CompEvent(
         val a = h.ageClass(today)
         return when (discipline) {
             Discipline.COURSE -> a in 2..9
+            Discipline.TROT_ATTELE -> a in 2..10
+            Discipline.WESTERN, Discipline.HUNTER -> a >= 4
             Discipline.MODELE -> a <= 3 || (h.mare && h.foalsBorn > 0)
             Discipline.ENDURANCE -> a >= (if (level >= 3) 7 else 5)
             Discipline.COMPLET -> a >= (if (level >= 3) 6 else 4)
@@ -141,6 +148,23 @@ object CompSim {
                 val pen = (60f - margin * 1.2f).coerceAtLeast(30f) + rng.range(-4f, 4f)
                 "${"%.1f".format(pen)} pts" to -pen
             }
+            Discipline.HUNTER -> {
+                val note = (70f + margin * 0.6f + rng.range(-2f, 2f)).coerceIn(30f, 98f)
+                val faults = if (margin < -10f && rng.chance(0.4f)) 1 else 0
+                if (faults > 0) "Barre — note ${(note * 0.6f).toInt()}/100" to note * 0.6f else "Note ${note.toInt()}/100" to note
+            }
+            Discipline.TROT_ATTELE -> {
+                if (margin < -16f && rng.chance(0.35f)) "Disqualifié (allure irrégulière)" to -1000f
+                else {
+                    val red = (78.5f - margin * 0.06f + rng.range(-0.3f, 0.3f)).coerceIn(69f, 84f) // réduction kilométrique (s/km)
+                    "Réd. km 1'${"%04.1f".format(red - 60f)}" to -red
+                }
+            }
+            Discipline.WESTERN -> {
+                val t = (16.2f - margin * 0.05f + rng.range(-0.2f, 0.2f)).coerceIn(13.6f, 22f)
+                val pen = if (margin < -10f && rng.chance(0.3f)) 5f else 0f
+                "${"%.3f".format(t + pen)} s${if (pen > 0) " (tonneau renversé)" else ""}" to -(t + pen)
+            }
             Discipline.MODELE -> {
                 val note = (13f + margin * 0.12f + rng.range(-0.4f, 0.4f)).coerceIn(9f, 19.5f)
                 "${"%.2f".format(note)}/20" to note
@@ -166,12 +190,16 @@ object CompSim {
         val m = Cal.month(day)
         val n = if (weekend) rng.range(3, 5) else rng.range(0, 2)
         repeat(n) {
-            val dWeights = doubleArrayOf(3.5, 2.0, 1.2, if (m in 2..10) 1.6 else 0.6, if (m in 3..9) 0.8 else 0.2, 0.6, if (m in 4..8) 0.9 else 0.0)
+            val dWeights = doubleArrayOf(3.5, 2.2, 1.2, if (m in 2..10) 1.6 else 0.6, if (m in 3..9) 0.8 else 0.2, 0.6, if (m in 4..8) 0.9 else 0.0, 1.0, 1.2, 0.8)
             val d = Discipline.values()[rng.weighted(dWeights)]
             val level = rng.weighted(doubleArrayOf(3.0, 3.0, 2.2, 1.4, 0.8, if (rng.chance(0.25f)) 0.4 else 0.05))
-            val venue = if (d == Discipline.COURSE) rng.pick(Names.RACECOURSES) else rng.pick(Names.VENUES)
-            val distance = if (d == Discipline.COURSE) rng.pick(listOf(1200, 1400, 1600, 2000, 2400, 3000)) else 0
-            val field = when (d) { Discipline.COURSE -> rng.range(8, 18); Discipline.MODELE -> rng.range(10, 30); else -> rng.range(15, 60) - level * 4 }
+            val venue = when (d) {
+                Discipline.COURSE -> rng.pick(Names.RACECOURSES)
+                Discipline.TROT_ATTELE -> rng.pick(listOf("Vincennes", "Enghien", "Caen", "Cabourg", "Laval", "Cagnes-sur-Mer", "Graignes"))
+                else -> rng.pick(Names.VENUES)
+            }
+            val distance = when (d) { Discipline.COURSE -> rng.pick(listOf(1200, 1400, 1600, 2000, 2400, 3000)); Discipline.TROT_ATTELE -> rng.pick(listOf(2100, 2700, 2850)); else -> 0 }
+            val field = when (d) { Discipline.COURSE, Discipline.TROT_ATTELE -> rng.range(8, 16); Discipline.MODELE -> rng.range(10, 30); else -> rng.range(15, 60) - level * 4 }
             out += CompEvent(nextId(), day, venue, d, level, distance, max(6, field), rng.range(20, 420))
         }
         return out

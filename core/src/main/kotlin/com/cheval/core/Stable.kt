@@ -2,9 +2,9 @@ package com.cheval.core
 
 /** Bâtiments et installations du domaine. [costs] : prix de chaque niveau. */
 enum class BuildingType(val label: String, val maxLevel: Int, val costs: IntArray, val upkeep: Int, val desc: String) {
-    ECURIE("Écurie", 4, intArrayOf(0, 18000, 32000, 55000), 60, "Boxes paillés de 3,5 × 3,5 m : 6 boxes par niveau."),
+    ECURIE("Écurie", 4, intArrayOf(6000, 18000, 32000, 55000), 60, "Le vieil abri (2 boxes) devient une vraie écurie : 6 boxes paillés par niveau."),
     PRE("Prairies", 4, intArrayOf(0, 9000, 16000, 28000), 25, "Herbages clôturés avec abri : 4 hectares par niveau. Plus d'herbe, moins de boue."),
-    CARRIERE("Carrière", 3, intArrayOf(14000, 26000, 45000), 30, "Sol sablé drainé pour le travail. Sans elle, le travail se fait au pré (moins efficace, plus risqué)."),
+    CARRIERE("Carrière", 3, intArrayOf(7500, 22000, 45000), 30, "Sol sablé drainé pour le travail. Sans elle, le travail se fait au pré (moins efficace, plus risqué)."),
     MANEGE("Manège couvert", 2, intArrayOf(65000, 120000), 80, "Travailler par tous les temps, même sous l'orage ou la neige."),
     MARCHEUR("Marcheur", 1, intArrayOf(12000), 15, "Détend les chevaux chaque jour : forme, moral, récupération des blessés."),
     PISTE("Piste de galop", 2, intArrayOf(30000, 60000), 30, "Piste en sable fibré pour l'entraînement des chevaux de course."),
@@ -15,7 +15,7 @@ enum class BuildingType(val label: String, val maxLevel: Int, val costs: IntArra
     INFIRMERIE("Infirmerie", 1, intArrayOf(15000), 20, "Travail, douche froide et box de soins : convalescences plus rapides."),
     DOUCHE("Douche et solarium", 1, intArrayOf(7000), 10, "Douche chaude et lampes chauffantes : propreté et récupération."),
     SELLERIE("Sellerie de compétition", 2, intArrayOf(6000, 15000), 5, "Selles sur mesure, protections, embouchures adaptées : meilleures performances."),
-    CLUB_HOUSE("Club-house", 2, intArrayOf(25000, 50000), 40, "Accueil des cavaliers de club et des propriétaires en pension."),
+    CLUB_HOUSE("Club-house", 2, intArrayOf(15000, 45000), 40, "Accueil des cavaliers de club et des propriétaires en pension."),
     CAMION("Camion 4 places", 1, intArrayOf(38000), 40, "Transport des chevaux : frais de déplacement en concours fortement réduits.");
 
     fun cost(nextLevel: Int): Int = costs[(nextLevel - 1).coerceIn(0, costs.size - 1)]

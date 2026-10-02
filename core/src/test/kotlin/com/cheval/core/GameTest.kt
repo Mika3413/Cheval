@@ -9,7 +9,7 @@ import org.junit.Test
 class GameTest {
     private fun newGame(seed: Long = 1): Game {
         val g = Game(seed)
-        g.newGameSetup()
+        g.newGameSetup(withStaff = true)
         g.takeStarter(g.starterChoices()[0])
         return g
     }
@@ -28,7 +28,7 @@ class GameTest {
 
     @Test
     fun neglectedHorseGetsHungryAndThirsty() {
-        val g = Game(3); g.newGameSetup()
+        val g = Game(3); g.newGameSetup(withStaff = true)
         g.staff.clear()
         val h = g.starterChoices()[0]; g.takeStarter(h)
         h.place = Place.BOX; h.hayRack = 0f; h.bucket = 0f
@@ -45,7 +45,7 @@ class GameTest {
 
     @Test
     fun starvationLowersBodyCondition() {
-        val g = Game(4); g.newGameSetup(); g.staff.clear()
+        val g = Game(4); g.newGameSetup(withStaff = true); g.staff.clear()
         val h = g.starterChoices()[0]; g.takeStarter(h)
         val bcs0 = h.bcs
         h.turnout = Turnout.BOX
@@ -180,5 +180,52 @@ class GameTest {
         val trained = alive.filter { it.age(g.day) > 5 }.maxOf { it.skills.maxOrNull() ?: 0f }
         assertTrue("progression $trained", trained > 30)
         assertNotNull(g.toJson())
+    }
+}
+
+class DayLoopTest {
+    @Test
+    fun dayBudgetJunkLessonsAndGoals() {
+        val g = Game(77); g.newGameSetup()
+        val h = g.starterChoices()[0]; g.takeStarter(h)
+        org.junit.Assert.assertEquals(2, g.boxes())
+        org.junit.Assert.assertEquals(8, g.junk.size)
+        // le temps de la journée est limité
+        val left = g.hoursLeft()
+        org.junit.Assert.assertTrue(left in 13.5f..14.1f)
+        org.junit.Assert.assertTrue(g.cleanJunk(g.junk.first().id).ok)
+        org.junit.Assert.assertTrue(g.hoursLeft() < left)
+        // nourrir, panser : premiers objectifs
+        g.feed(h); g.groom(h, 1f)
+        val first = Goals.active(g).first()
+        org.junit.Assert.assertTrue(first.done(g))
+        val m0 = g.money
+        org.junit.Assert.assertTrue(g.claimGoal(first).ok)
+        org.junit.Assert.assertTrue(g.money > m0)
+        // un cours d'équitation rapporte de l'argent
+        val m1 = g.money
+        val r = g.giveLesson(listOf(h))
+        org.junit.Assert.assertTrue(r.msg, r.ok)
+        org.junit.Assert.assertTrue(g.money > m1)
+        // la journée finit par manquer de temps
+        while (g.spend(1f)) {}
+        org.junit.Assert.assertFalse(g.giveLesson(listOf(h)).ok)
+        g.sleepUntilMorning()
+        org.junit.Assert.assertEquals(7, g.hourOfDay.toInt())
+        org.junit.Assert.assertEquals(0, g.lessonsToday)
+        // sauvegarde des nouveaux champs
+        val g2 = Game.fromJson(g.toJson())
+        org.junit.Assert.assertEquals(g.junk.size, g2.junk.size)
+        org.junit.Assert.assertEquals(g.goalsDone, g2.goalsDone)
+        org.junit.Assert.assertEquals(g.stats, g2.stats)
+    }
+
+    @Test
+    fun newDisciplinesHaveBreedAptitudes() {
+        val g = Game(5)
+        val trot = g.generateHorse(Breed.TROTTEUR, Sex.HONGRE, 5, withAncestors = false)
+        val perch = g.generateHorse(Breed.PERCHERON, Sex.HONGRE, 5, withAncestors = false)
+        org.junit.Assert.assertTrue(Discipline.TROT_ATTELE.potential(trot) > Discipline.TROT_ATTELE.potential(perch) + 15)
+        for (d in Discipline.values()) for (l in 0..5) org.junit.Assert.assertTrue(Levels.name(d, l).isNotEmpty())
     }
 }

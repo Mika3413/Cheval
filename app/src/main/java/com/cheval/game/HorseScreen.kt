@@ -210,26 +210,26 @@ class HorseScreen(app: GameView, private val horse: Horse) : Screen(app) {
         gui.text(c, "Actions", r.left, y + 12f * u, 13f, font = gui.serif); y += 20f * u
         val acts = ArrayList<Triple<String, String?, () -> Unit>>()
         if (horse.weaned) {
-            acts += Triple("Nourrir", "${fmt1(ra.hay / 2)} kg foin", { res(g.feed(horse)); app.sound.play(SoundFx.S.MUNCH, 0.8f) })
+            acts += Triple("Nourrir", "${fmt1(ra.hay / 2)} kg foin", { if (timeGate(app, 0.25f)) { res(g.feed(horse)); app.sound.play(SoundFx.S.MUNCH, 0.8f) } })
             if (horse.place == Place.BOX) {
-                acts += Triple("Abreuver", "seau ${horse.bucket.toInt()} L", { res(g.water(horse)); app.sound.play(SoundFx.S.WATER, 0.7f) })
-                acts += Triple("Curer le box", "1 botte de paille", { res(g.muck(horse)) })
+                acts += Triple("Abreuver", "seau ${horse.bucket.toInt()} L", { if (timeGate(app, 0.1f)) { res(g.water(horse)); app.sound.play(SoundFx.S.WATER, 0.7f) } })
+                acts += Triple("Curer le box", "1 botte de paille", { if (timeGate(app, 0.4f)) res(g.muck(horse)) })
             }
         }
-        acts += Triple("Panser", "brosses et cure-pied", { app.push(GroomScreen(app, horse)) })
+        acts += Triple("Panser", "brosses et cure-pied", { if (hasTime(app, 0.75f)) app.push(GroomScreen(app, horse)) })
         acts += Triple("Carotte", "complicité +", { res(g.treat(horse)); app.sound.play(SoundFx.S.MUNCH) })
-        acts += Triple(if (horse.place == Place.PRE) "Rentrer au box" else "Sortir au pré", null, { res(g.setPlace(horse, if (horse.place == Place.PRE) Place.BOX else Place.PRE)); app.sound.play(SoundFx.S.HOOF_SOFT) })
+        acts += Triple(if (horse.place == Place.PRE) "Rentrer au box" else "Sortir au pré", null, { if (timeGate(app, 0.15f)) { res(g.setPlace(horse, if (horse.place == Place.PRE) Place.BOX else Place.PRE)); app.sound.play(SoundFx.S.HOOF_SOFT) } })
         acts += Triple("Sortie : ${horse.turnout.label}", "routine du palefrenier", { horse.turnout = Turnout.values()[(horse.turnout.ordinal + 1) % Turnout.values().size] })
-        acts += Triple("Vétérinaire", if (horse.ailments.any { !it.treated }) "${horse.ailments.filter { !it.treated }.sumOf { it.type.vet } + 60} €" else "bilan 90 €", { res(g.callVet(horse)) })
-        acts += Triple("Maréchal : parer", "60 €", { res(g.farrier(horse, false)) })
-        if (horse.backed) acts += Triple("Maréchal : ferrer", "140 €", { res(g.farrier(horse, true)) })
-        acts += Triple("Dentiste", "95 €", { res(g.dentist(horse)) })
-        acts += Triple("Vacciner", "80 €", { res(g.vaccinate(horse)) })
-        acts += Triple("Vermifuger", "28 €", { res(g.deworm(horse)) })
+        acts += Triple("Vétérinaire", if (horse.ailments.any { !it.treated }) "${horse.ailments.filter { !it.treated }.sumOf { it.type.vet } + 60} €" else "bilan 90 €", { if (timeGate(app, 0.5f)) res(g.callVet(horse)) })
+        acts += Triple("Maréchal : parer", "60 €", { if (timeGate(app, 0.75f)) res(g.farrier(horse, false)) })
+        if (horse.backed) acts += Triple("Maréchal : ferrer", "140 €", { if (timeGate(app, 1f)) res(g.farrier(horse, true)) })
+        acts += Triple("Dentiste", "95 €", { if (timeGate(app, 0.5f)) res(g.dentist(horse)) })
+        acts += Triple("Vacciner", "80 €", { if (timeGate(app, 0.25f)) res(g.vaccinate(horse)) })
+        acts += Triple("Vermifuger", "28 €", { if (timeGate(app, 0.2f)) res(g.deworm(horse)) })
         acts += Triple(if (horse.rugged) "Ôter la couverture" else "Mettre la couverture", null, { res(g.toggleRug(horse)) })
-        if (!horse.clipped && horse.backed) acts += Triple("Tondre", "70 €", { res(g.clip(horse)) })
-        if (!horse.weaned) acts += Triple("Sevrer", "vers 6 mois", { res(g.wean(horse)) })
-        if (horse.handling < 100f) acts += Triple("Éducation", "${horse.handling.toInt()} %", { res(g.train(horse, Exercise.MANIPULATION, g.rider.overall, true)) })
+        if (!horse.clipped && horse.backed) acts += Triple("Tondre", "70 €", { if (timeGate(app, 0.75f)) res(g.clip(horse)) })
+        if (!horse.weaned) acts += Triple("Sevrer", "vers 6 mois", { if (timeGate(app, 0.25f)) res(g.wean(horse)) })
+        if (horse.handling < 100f) acts += Triple("Éducation", "${horse.handling.toInt()} %", { if (timeGate(app, 0.4f)) res(g.train(horse, Exercise.MANIPULATION, g.rider.overall, true)) })
         val bw = (r.width() - 16f * u) / 3f
         for ((i, a) in acts.withIndex()) {
             val bx = r.left + (i % 3) * (bw + 6f * u); val by = y + (i / 3) * 40f * u
@@ -257,12 +257,13 @@ class HorseScreen(app: GameView, private val horse: Horse) : Screen(app) {
             val gains = ex.gains.keys.joinToString(" ") { it.short }
             gui.text(c, "${ex.minutes} min · $gains", row.left + 8f * u, row.top + 43f * u, 8.5f, Pal.INK_L, maxW = row.width() - 200f * u)
             val ridable = ex.ridden || ex == Exercise.DEBOURRAGE || ex == Exercise.LONGE
-            gui.button(c, RectF(row.right - 186f * u, row.top + 8f * u, row.right - 96f * u, row.bottom - 8f * u), if (ex.ridden) "Monter" else "Travailler", Btn.PRIMARY, enabled = why == null, size = 11f) {
-                if (ex.ridden) app.push(RideScreen(app, horse, RideMode.forExercise(ex), -1, ex))
-                else { res(g.train(horse, ex, g.rider.overall, true)); app.sound.play(SoundFx.S.HOOF_SOFT) }
+            gui.button(c, RectF(row.right - 186f * u, row.top + 8f * u, row.right - 96f * u, row.bottom - 8f * u), if (ex.ridden) "Monter" else if (ex == Exercise.SULKY) "Mener" else "Travailler", Btn.PRIMARY, enabled = why == null, size = 11f) {
+                val cost = ex.minutes / 60f + 0.25f
+                if (ex.ridden || ex == Exercise.SULKY) { if (hasTime(app, cost)) app.push(RideScreen(app, horse, RideMode.forExercise(ex), -1, ex)) }
+                else if (timeGate(app, cost)) { res(g.train(horse, ex, g.rider.overall, true)); app.sound.play(SoundFx.S.HOOF_SOFT) }
             }
             gui.button(c, RectF(row.right - 90f * u, row.top + 8f * u, row.right - 6f * u, row.bottom - 8f * u), "Rapide", enabled = why == null && ridable, size = 10.5f, sub = "sans jouer") {
-                res(g.train(horse, ex, g.rider.overall, true, quality = 0.8f))
+                if (timeGate(app, ex.minutes / 60f + 0.25f)) res(g.train(horse, ex, g.rider.overall, true, quality = 0.8f))
             }
             y += 52f * u
         }

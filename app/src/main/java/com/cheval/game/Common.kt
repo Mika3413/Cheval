@@ -50,26 +50,25 @@ fun drawHorseFit(c: Canvas, h: Horse, day: Int, rect: RectF, pose: HorsePose = H
 fun potentialStars(h: Horse): Float = ((h.bestDiscipline().potential(h) - 30f) / 10f).coerceIn(0.5f, 5f)
 fun traitStars(h: Horse, t: Trait): Float = ((h.pot(t) - 25f) / 12f).coerceIn(0f, 5f)
 
-/** Fond de papier crème pour les écrans de gestion. */
+/** Fond des écrans de gestion : table en bois et grande feuille de parchemin. */
 fun paperBackground(c: Canvas, gui: Gui) {
-    val p = gui.p
-    p.color = -1; p.shader = LinearGradient(0f, 0f, 0f, gui.h, Pal.CREAM, Pal.CREAM_D, Shader.TileMode.CLAMP)
-    c.drawRect(0f, 0f, gui.w, gui.h, p)
-    p.shader = null
-}
-
-/** Barre de titre verte avec bouton retour. */
-fun titleBar(c: Canvas, gui: Gui, title: String, subtitle: String? = null, onBack: (() -> Unit)?) {
     val u = gui.u
     val p = gui.p
-    p.color = -1; p.shader = LinearGradient(0f, 0f, 0f, 44f * u, Pal.GREEN_L, Pal.GREEN, Shader.TileMode.CLAMP)
-    c.drawRect(0f, 0f, gui.w, 44f * u, p)
+    p.color = -1; p.shader = LinearGradient(0f, 0f, 0f, gui.h, Color.rgb(150, 104, 64), Color.rgb(104, 70, 42), Shader.TileMode.CLAMP)
+    c.drawRect(0f, 0f, gui.w, gui.h, p)
     p.shader = null
-    p.color = Pal.GOLD; c.drawRect(0f, 44f * u, gui.w, 45.5f * u, p)
-    val x0 = if (onBack != null) 54f * u else 14f * u
-    if (onBack != null) gui.button(c, RectF(8f * u, 7f * u, 46f * u, 37f * u), "‹", Btn.GHOST, size = 20f) { onBack() }
-    gui.text(c, title, x0, if (subtitle != null) 21f * u else 28f * u, 17f, Pal.CREAM, font = gui.serif)
-    if (subtitle != null) gui.text(c, subtitle, x0, 36f * u, 10.5f, Pal.GOLD_L)
+    Ink.grain(c, RectF(0f, 0f, gui.w, gui.h), 120)
+    Ink.parchment(c, RectF(6f * u, 50f * u, gui.w - 6f * u, gui.h - 4f * u), u)
+}
+
+/** En-tête : planche de bois sculptée, titre manuscrit, bouton retour. */
+fun titleBar(c: Canvas, gui: Gui, title: String, subtitle: String? = null, onBack: (() -> Unit)?) {
+    val u = gui.u
+    Ink.plank(c, RectF(4f * u, 3f * u, gui.w - 4f * u, 46f * u), 6f * u, u, Ink.WOOD_D)
+    val x0 = if (onBack != null) 58f * u else 18f * u
+    if (onBack != null) gui.button(c, RectF(12f * u, 9f * u, 50f * u, 40f * u), "‹", Btn.NORMAL, size = 20f) { onBack() }
+    gui.text(c, title, x0, if (subtitle != null) 23f * u else 30f * u, 17f, Pal.CREAM, font = Ink.hand, shadow = true)
+    if (subtitle != null) gui.text(c, subtitle, x0, 39f * u, 10.5f, Ink.WOOD_L, maxW = gui.w - x0 - 140f * u)
 }
 
 fun sexIcon(h: Horse): String = when (h.sex) { com.cheval.core.Sex.JUMENT -> "♀"; else -> "♂" }
@@ -80,4 +79,21 @@ fun Paint.reset2(): Paint { shader = null; return this }
 
 fun drawDivider(c: Canvas, gui: Gui, x0: Float, x1: Float, y: Float) {
     gui.p.shader = null; gui.p.color = Color.argb(70, 120, 100, 70); c.drawRect(x0, y, x1, y + 1f * gui.u, gui.p)
+}
+
+/** Consomme du temps de la journée de travail ; sinon prévient le joueur. */
+fun timeGate(app: GameView, hours: Float): Boolean {
+    val g = app.game ?: return false
+    if (g.spend(hours)) return true
+    app.gui.toast("Il est trop tard pour ça aujourd'hui (${com.cheval.core.fmt1(hours)} h nécessaires). Passez à une nouvelle journée !", Pal.LEATHER)
+    app.sound.play(SoundFx.S.BAD, 0.4f)
+    return false
+}
+
+/** Vérifie seulement qu'il reste assez de temps. */
+fun hasTime(app: GameView, hours: Float): Boolean {
+    val g = app.game ?: return false
+    if (g.hoursLeft() >= hours - 0.01f && g.hourOfDay >= g.dayStart - 0.01f) return true
+    app.gui.toast("Plus assez de temps aujourd'hui (${com.cheval.core.fmt1(hours)} h nécessaires).", Pal.LEATHER)
+    return false
 }

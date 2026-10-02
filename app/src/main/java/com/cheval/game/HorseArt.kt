@@ -64,8 +64,10 @@ class HorsePose {
     var jumpHeight = 1.2f
     var breathe = 0f
     var speedBlend = 0f // 0..1 crins au vent
+    /** 0 debout … 1 couché sur le sternum (repos, sommeil). */
+    var lie = 0f
 
-    fun copyFrom(o: HorsePose) { gait = o.gait; phase = o.phase; neck = o.neck; head = o.head; ears = o.ears; tailSwing = o.tailSwing; tailLift = o.tailLift; blink = o.blink; jump = o.jump; jumpHeight = o.jumpHeight; breathe = o.breathe; speedBlend = o.speedBlend }
+    fun copyFrom(o: HorsePose) { gait = o.gait; phase = o.phase; neck = o.neck; head = o.head; ears = o.ears; tailSwing = o.tailSwing; tailLift = o.tailLift; blink = o.blink; jump = o.jump; jumpHeight = o.jumpHeight; breathe = o.breathe; speedBlend = o.speedBlend; lie = o.lie }
 }
 
 /** Ce qu'il faut savoir d'un cheval pour le dessiner. */
@@ -158,8 +160,41 @@ object HorseArt {
      * Dessine le cheval. [x], [groundY] : position à l'écran du point au sol sous le milieu du tronc.
      * [scale] : pixels par centimètre. [light] : 0 nuit … 1 plein jour.
      */
+    /** Style illustré : contour d'encre autour de la silhouette et grain d'aquarelle. */
+    var inkMode = true
+    private var sil = false
+    private var inkW = 1f
+    private val silFilter = android.graphics.PorterDuffColorFilter(Ink.INK, android.graphics.PorterDuff.Mode.SRC_IN)
+    private val grainMatrix = android.graphics.Matrix()
+
     fun draw(c: Canvas, a: Appearance, pose: HorsePose, x: Float, groundY: Float, scale: Float, facingRight: Boolean = true,
              light: Float = 1f, tack: Tack? = null, shadow: Boolean = true) {
+        if (inkMode) {
+            // 1er passage : silhouette élargie, entièrement à l'encre ; le 2e passage la recouvre et ne laisse que le contour.
+            inkW = max(a.H * 0.009f, 1.8f / scale)
+            sil = true
+            fill.colorFilter = silFilter; fill.style = Paint.Style.FILL_AND_STROKE; fill.strokeWidth = inkW * 2f; fill.strokeJoin = Paint.Join.ROUND
+            stroke.colorFilter = silFilter
+            try { drawInternal(c, a, pose, x, groundY, scale, facingRight, light * 0f + 1f, tack, false) } finally {
+                sil = false
+                fill.colorFilter = null; fill.style = Paint.Style.FILL; fill.strokeWidth = 0f
+                stroke.colorFilter = null
+            }
+        }
+        drawInternal(c, a, pose, x, groundY, scale, facingRight, light, tack, shadow)
+        if (inkMode) {
+            // grain d'aquarelle à l'échelle de l'écran
+            c.save(); c.translate(x, groundY); c.scale(if (facingRight) scale else -scale, scale)
+            grainMatrix.setScale(1f / scale, 1f / scale)
+            val gpaint = Ink.grainPaint(110); gpaint.shader.setLocalMatrix(grainMatrix)
+            c.drawPath(bodyPath, gpaint); c.drawPath(neckPath, gpaint); c.drawPath(headPath, gpaint)
+            gpaint.shader.setLocalMatrix(null)
+            c.restore()
+        }
+    }
+
+    private fun drawInternal(c: Canvas, a: Appearance, pose: HorsePose, x: Float, groundY: Float, scale: Float, facingRight: Boolean,
+             light: Float, tack: Tack?, shadow: Boolean) {
         c.save()
         c.translate(x, groundY)
         c.scale(if (facingRight) scale else -scale, scale)
@@ -192,7 +227,8 @@ object HorseArt {
         val pr = Math.toRadians(pitchDeg.toDouble()).toFloat()
         cosP = cos(pr); sinP = sin(pr)
         pivotY = -H * 0.7f
-        bodyDy = bob - jumpLift
+        val lie = pose.lie.coerceIn(0f, 1f)
+        bodyDy = bob - jumpLift + lie * H * 0.4f * a.leg
         val nod = if (jt >= 0f) 0f else sin(tw * (if (g == Gait.PAS) 2f else 1f)) * g.nod
 
         // ---------------- ossature
@@ -255,6 +291,14 @@ object HorseArt {
                 hy = min(hy, 0f)
                 swingT = if (stanceNow) 0f else 0.6f
             }
+            if (lie > 0f) {
+                // membres repliés sous le corps
+                val fx = if (lg.front) elbowX + H * 0.16f else hipJX + H * 0.3f
+                hx += (fx + depthOff - hx) * lie
+                hy += (0f - hy) * lie
+                swingT += (0.9f - swingT) * lie
+                stanceNow = lie < 0.5f && stanceNow
+            }
             lg.stance = stanceNow
             // Paturon : incliné à ~55° en appui, fléchi pendant le soutien
             val pasternAng = if (stanceNow) -122f else (-122f + 95f * sin(PI.toFloat() * swingT))
@@ -267,7 +311,7 @@ object HorseArt {
         }
 
         // ---------------- ombre portée
-        if (shadow) {
+        if (shadow && !sil) {
             fill.shader = null
             fill.color = Color.argb((60 * light).toInt() + 25, 0, 0, 0)
             val sw = L * 0.6f * (1f - min(0.5f, jumpLift / H))
@@ -394,12 +438,14 @@ object HorseArt {
 
     // ---------------------------------------------------------------- détails du corps
     private fun soft(c: Canvas, cx: Float, cy: Float, r: Float, col: Int, a0: Float) {
+        if (sil) return
         fill.color = -1; fill.shader = RadialGradient(cx, cy, r, intArrayOf(alpha(col, a0), alpha(col, a0 * 0.5f), alpha(col, 0f)), floatArrayOf(0f, 0.5f, 1f), Shader.TileMode.CLAMP)
         c.drawCircle(cx, cy, r, fill)
         fill.shader = null
     }
 
     private fun detailShading(c: Canvas, a: Appearance, bodyCol: Int, look: CoatLook, H: Float, L: Float, chestY: Float, topY: Float, light: Float) {
+        if (sil) return
         c.save()
         c.clipPath(bodyPath)
         val hiA = (0.07f + look.shine * 0.14f) * light
@@ -439,6 +485,7 @@ object HorseArt {
     }
 
     private fun ribs(c: Canvas, bodyCol: Int, H: Float, L: Float, topY: Float, chestY: Float, bcs: Float) {
+        if (sil) return
         c.save(); c.clipPath(bodyPath)
         stroke.color = alpha(shade(bodyCol, 0.55f), (3.8f - bcs) * 0.3f)
         stroke.strokeWidth = H * 0.008f
@@ -465,6 +512,7 @@ object HorseArt {
     }
 
     private fun coatPatterns(c: Canvas, a: Appearance, look: CoatLook, H: Float, L: Float, topY: Float, chestY: Float, lightK: Float) {
+        if (sil) return
         val r = Rng(look.seed)
         val white = shade(0xFFF4F2EC.toInt(), lightK)
         c.save(); c.clipPath(bodyPath)
@@ -765,6 +813,7 @@ object HorseArt {
     }
 
     private fun headPatterns(c: Canvas, look: CoatLook, lightK: Float) {
+        if (sil) return
         c.save(); c.clipPath(headPath)
         if (look.leopard >= 2) spots(c, look, hx(0.4f, 0f), hy(0.4f, 0f), hL * 0.4f, 7, lightK)
         if (look.greyLevel > 0f && look.greyLevel < 0.9f) { fill.color = alpha(shade(0xFFF2F0EA.toInt(), lightK), look.greyLevel * 0.45f); c.drawPaint(fill) }
@@ -773,6 +822,7 @@ object HorseArt {
     }
 
     private fun drawFace(c: Canvas, look: CoatLook, pose: HorsePose, lightK: Float, hAng: Float) {
+        if (sil) return
         val white = shade(0xFFF4F2EC.toInt(), lightK)
         c.save(); c.clipPath(headPath)
         fill.color = white

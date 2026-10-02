@@ -221,6 +221,7 @@ class GroomScreen(app: GameView, private val horse: Horse) : Screen(app) {
         val pr = progress()
         if (pr > 0.05f) {
             val q = (pr - wrongOrder * 0.02f).coerceIn(0f, 1f)
+            game.spend(0.75f)
             val r = game.groom(horse, q)
             if (hooves.all { it }) horse.hooves = (horse.hooves + 2f).coerceAtMost(100f)
             Looks.invalidate(horse.id)

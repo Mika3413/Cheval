@@ -7,7 +7,7 @@ object DebugSim {
         val seed = args.getOrNull(0)?.toLongOrNull() ?: 1L
         val years = args.getOrNull(1)?.toIntOrNull() ?: 1
         val g = Game(seed)
-        g.newGameSetup()
+        g.newGameSetup(withStaff = true)
         g.takeStarter(g.starterChoices()[0])
         g.money = 300000
         g.build(BuildingType.CARRIERE)

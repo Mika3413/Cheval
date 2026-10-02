@@ -48,7 +48,7 @@ class Gui {
     var u = 1f
     var w = 1f
     var h = 1f
-    val serif: Typeface = Typeface.create(Typeface.SERIF, Typeface.BOLD)
+    val serif: Typeface = Ink.hand
     val serifN: Typeface = Typeface.create(Typeface.SERIF, Typeface.NORMAL)
     val sans: Typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.NORMAL)
     val sansB: Typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD)
@@ -126,45 +126,31 @@ class Gui {
 
     // ------------------------------------------------------------------ surfaces
     fun paper(c: Canvas, rect: RectF, radius: Float = 10f, color: Int = Pal.PAPER, border: Boolean = true) {
-        r.set(rect); r.offset(0f, 2.5f * u)
-        p.shader = null; p.color = Pal.SHADOW
-        c.drawRoundRect(r, radius * u, radius * u, p)
-        p.color = color
-        c.drawRoundRect(rect, radius * u, radius * u, p)
-        if (border) { sp.shader = null; sp.color = Color.argb(160, 201, 164, 76); sp.strokeWidth = 1.2f * u; c.drawRoundRect(rect, radius * u, radius * u, sp) }
+        Ink.parchment(c, rect, u, if (color == Pal.PAPER || color == Pal.CREAM) Ink.PARCH else color, border)
     }
 
+    /** Planche de bois sombre (barres d'outils, en-têtes). */
     fun dark(c: Canvas, rect: RectF, radius: Float = 10f, alpha: Int = 215) {
-        p.shader = null; p.color = Color.argb(alpha, 18, 34, 27)
-        c.drawRoundRect(rect, radius * u, radius * u, p)
-        sp.shader = null; sp.color = Color.argb(140, 201, 164, 76); sp.strokeWidth = 1f * u
-        c.drawRoundRect(rect, radius * u, radius * u, sp)
+        Ink.plank(c, rect, 6f * u, u, Ink.WOOD_D)
     }
 
     fun button(c: Canvas, rect: RectF, label: String, style: Btn = Btn.NORMAL, enabled: Boolean = true, size: Float = 13f, sub: String? = null, onClick: () -> Unit) {
-        val (bg, fg, border) = when {
-            !enabled -> Triple(Color.argb(200, 200, 194, 182), Color.rgb(140, 132, 120), Color.argb(80, 0, 0, 0))
-            style == Btn.PRIMARY -> Triple(Pal.GREEN, Pal.CREAM, Pal.GOLD)
-            style == Btn.GOLD -> Triple(Pal.GOLD, Pal.INK, Pal.GOLD_L)
-            style == Btn.DANGER -> Triple(Pal.RED, Pal.CREAM, Color.rgb(230, 140, 120))
-            style == Btn.GHOST -> Triple(Color.argb(120, 255, 255, 255), Pal.INK, Color.argb(120, 120, 100, 70))
-            style == Btn.TAB -> Triple(Color.argb(0, 0, 0, 0), Pal.CREAM, Color.argb(0, 0, 0, 0))
-            style == Btn.TAB_ON -> Triple(Color.argb(60, 232, 206, 130), Pal.GOLD_L, Pal.GOLD)
-            else -> Triple(Pal.CREAM, Pal.INK, Color.argb(200, 170, 140, 80))
+        val fg: Int
+        when {
+            !enabled -> { Ink.parchment(c, rect, u, Color.rgb(214, 204, 186)); fg = Color.rgb(150, 136, 118) }
+            style == Btn.PRIMARY -> { Ink.plank(c, rect, 6f * u, u, Color.rgb(84, 120, 76), nails = false); fg = Pal.CREAM }
+            style == Btn.GOLD -> { Ink.plank(c, rect, 6f * u, u, Ink.WOOD, nails = false); fg = Ink.INK }
+            style == Btn.DANGER -> { Ink.plank(c, rect, 6f * u, u, Color.rgb(160, 70, 52), nails = false); fg = Pal.CREAM }
+            style == Btn.GHOST -> { Ink.parchment(c, rect, u, Color.rgb(236, 222, 192)); fg = Ink.INK }
+            style == Btn.TAB -> fg = Pal.CREAM
+            style == Btn.TAB_ON -> { Ink.parchment(c, rect, u); fg = Ink.INK }
+            else -> { Ink.parchment(c, rect, u); fg = Ink.INK }
         }
-        val rad = 8f * u
-        if (style != Btn.TAB && style != Btn.TAB_ON && enabled) {
-            r.set(rect); r.offset(0f, 2f * u); p.shader = null; p.color = Color.argb(70, 0, 0, 0); c.drawRoundRect(r, rad, rad, p)
-        }
-        p.shader = if (enabled && (style == Btn.PRIMARY || style == Btn.GOLD)) LinearGradient(0f, rect.top, 0f, rect.bottom, HorseArt.lighten(bg, 0.12f), HorseArt.shade(bg, 0.88f), Shader.TileMode.CLAMP) else null
-        p.color = bg
-        c.drawRoundRect(rect, rad, rad, p)
-        p.shader = null
-        if (Color.alpha(border) > 0) { sp.shader = null; sp.color = border; sp.strokeWidth = 1.2f * u; c.drawRoundRect(rect, rad, rad, sp) }
-        if (sub == null) text(c, label, rect.centerX(), rect.centerY() + size * u * 0.36f, size, fg, Paint.Align.CENTER, sansB, maxW = rect.width() - 6f * u)
+        val font = Ink.hand
+        if (sub == null) text(c, label, rect.centerX(), rect.centerY() + size * u * 0.36f, size, fg, Paint.Align.CENTER, font, maxW = rect.width() - 8f * u)
         else {
-            text(c, label, rect.centerX(), rect.centerY() - 1f * u, size, fg, Paint.Align.CENTER, sansB, maxW = rect.width() - 6f * u)
-            text(c, sub, rect.centerX(), rect.centerY() + size * u * 0.95f, size * 0.72f, HorseArt.alpha(fg, 0.75f), Paint.Align.CENTER, sans, maxW = rect.width() - 6f * u)
+            text(c, label, rect.centerX(), rect.centerY() - 1f * u, size, fg, Paint.Align.CENTER, font, maxW = rect.width() - 8f * u)
+            text(c, sub, rect.centerX(), rect.centerY() + size * u * 0.95f, size * 0.72f, HorseArt.alpha(fg, 0.8f), Paint.Align.CENTER, sans, maxW = rect.width() - 8f * u)
         }
         if (enabled) hit(rect, onClick)
     }

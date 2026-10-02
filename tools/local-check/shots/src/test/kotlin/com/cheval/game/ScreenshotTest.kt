@@ -43,34 +43,42 @@ class ScreenshotTest {
         save(view, "01_menu")
         view.push(NewGameScreen(view)); view.stepForTest(0.5f)
         save(view, "02_new_game")
-        // partie de démonstration
-        val g = Game(42); g.newGameSetup()
+        // partie de démonstration : le domaine à l'abandon du début
+        val g0 = Game(41); g0.newGameSetup(); g0.takeStarter(g0.starterChoices()[0])
+        g0.advance(3.0)
+        view.setGameForTest(g0)
+        view.replaceAll(HubScreen(view))
+        view.stepForTest(4f)
+        save(view, "03_domaine_debut")
+        // un domaine plus avancé
+        val g = Game(42); g.newGameSetup(withStaff = true)
         g.takeStarter(g.starterChoices()[0])
         g.money = 250000
-        g.build(BuildingType.CARRIERE); g.build(BuildingType.ECURIE); g.build(BuildingType.CLUB_HOUSE)
+        g.build(BuildingType.CARRIERE); g.build(BuildingType.ECURIE); g.build(BuildingType.CLUB_HOUSE); g.build(BuildingType.PRE); g.build(BuildingType.GRENIER); g.build(BuildingType.GRENIER)
+        g.junk.clear()
         g.candidates.firstOrNull { it.role == Role.SOIGNEUR }?.let { g.hire(it) }
-        repeat(5) { g.buy(g.market.first { l -> g.horse(l.horseId)!!.age(g.day) >= 3 }) }
+        repeat(6) { g.buy(g.market.first { l -> g.horse(l.horseId)!!.age(g.day) >= 3 }) }
         val mare = g.owned().firstOrNull { it.mare }
         for (x in g.owned()) { g.vaccinate(x); x.turnout = Turnout.JOUR }
-        g.advance(24.0 * 70 + 3.0) // mai, 10 h
+        g.advance(24.0 * 70 + 4.0) // mai, 11 h
+        g.owned().take(5).forEach { g.setPlace(it, Place.PRE) }
         view.setGameForTest(g)
         view.replaceAll(HubScreen(view))
-        view.timeSpeed = 0
-        view.stepForTest(3f)
-        save(view, "03_domaine_matin")
-        g.advance(9.5)
-        view.stepForTest(3f)
-        save(view, "04_domaine_soir")
-        g.advance(5.0)
-        view.stepForTest(1f)
-        save(view, "05_domaine_nuit")
+        view.stepForTest(6f)
+        save(view, "04_domaine")
+        val hub = view.screen
+        val fCam = HubScreen::class.java.getDeclaredField("camX"); fCam.isAccessible = true
+        fCam.setFloat(hub, 1600f); view.stepForTest(0.5f)
+        save(view, "05_domaine_paddocks")
+        g.advance(10.0); view.stepForTest(8f)
+        save(view, "05b_domaine_nuit")
+        g.sleepUntilMorning()
         val hz = g.owned().first()
         hz.cleanliness = 35f
-        val hs = HorseScreen(view, hz)
-        view.push(hs); view.stepForTest(0.5f)
+        view.push(HorseScreen(view, hz)); view.stepForTest(0.5f)
         save(view, "06_fiche_soins")
         view.pop()
-        for (tab in listOf(2, 3, 4)) {
+        for (tab in listOf(1, 2, 3)) {
             val s = HorseScreen(view, g.owned()[1]); view.push(s)
             val f = HorseScreen::class.java.getDeclaredField("tab"); f.isAccessible = true; f.setInt(s, tab)
             view.stepForTest(0.2f); save(view, "07_fiche_onglet_$tab"); view.pop()
@@ -78,29 +86,24 @@ class ScreenshotTest {
         view.push(GroomScreen(view, hz)); view.stepForTest(0.5f)
         save(view, "08_pansage")
         view.pop()
-        g.advance(24.0 - g.hourOfDay + 15.0)
-        view.push(RideScreen(view, hz, RideMode(RideKind.BALADE, false), -1, Exercise.EXTERIEUR))
-        view.stepForTest(0.3f)
-        val rs = view.screen as RideScreen
         val fDist = RideScreen::class.java.getDeclaredField("dist"); fDist.isAccessible = true
         val fGait = RideScreen::class.java.getDeclaredField("gaitIdx"); fGait.isAccessible = true
-        fGait.setInt(rs, 4); view.stepForTest(4f); fDist.setFloat(rs, 760f); view.stepForTest(0.5f)
-        save(view, "09_balade_plage")
-        view.pop()
-        view.push(RideScreen(view, hz, RideMode(RideKind.OBSTACLES, true, 2), -1, Exercise.PARCOURS))
-        val rs2 = view.screen as RideScreen
-        fGait.setInt(rs2, 3); view.stepForTest(6.1f)
-        save(view, "10_cso")
-        view.pop()
-        view.push(RideScreen(view, hz, RideMode(RideKind.PISTE, true, 3, 1600), -1, Exercise.GALOP))
-        val rs3 = view.screen as RideScreen
-        fGait.setInt(rs3, 4); view.stepForTest(8f)
-        save(view, "11_course")
-        view.pop()
-        view.push(RideScreen(view, hz, RideMode(RideKind.DRESSAGE, true, 2), -1, Exercise.DRESSAGE))
-        fGait.setInt(view.screen as RideScreen, 2); view.stepForTest(5f)
-        save(view, "12_dressage")
-        view.pop()
+        fun ride(mode: RideMode, ex: Exercise, gait: Int, secs: Float, name: String, setDist: Float = -1f) {
+            view.push(RideScreen(view, hz, mode, -1, ex))
+            val rs = view.screen as RideScreen
+            view.stepForTest(4f)
+            fGait.setInt(rs, gait); view.stepForTest(secs)
+            if (setDist >= 0f) { fDist.setFloat(rs, setDist); view.stepForTest(0.5f) }
+            save(view, name); view.pop()
+        }
+        ride(RideMode(RideKind.BALADE, false), Exercise.EXTERIEUR, 4, 3f, "09_balade_plage", 760f)
+        ride(RideMode(RideKind.OBSTACLES, true, 2), Exercise.PARCOURS, 3, 2f, "10_cso")
+        ride(RideMode(RideKind.PISTE, true, 3, 1600), Exercise.GALOP, 4, 5f, "11_course")
+        ride(RideMode(RideKind.DRESSAGE, true, 2), Exercise.DRESSAGE, 2, 3f, "12_dressage")
+        ride(RideMode(RideKind.TROT, true, 3, 2100), Exercise.SULKY, 2, 5f, "12b_trot_attele")
+        ride(RideMode(RideKind.ENDURANCE, true, 1), Exercise.FOND, 3, 4f, "12c_endurance")
+        ride(RideMode(RideKind.WESTERN, true, 1), Exercise.WESTERN, 4, 2f, "12d_barrel")
+        ride(RideMode(RideKind.HUNTER, true, 1), Exercise.GYMNASTIQUE, 3, 2.5f, "12e_hunter")
         view.push(HorsesScreen(view)); view.stepForTest(0.2f); save(view, "13_chevaux"); view.pop()
         view.push(CompetitionScreen(view)); view.stepForTest(0.2f); save(view, "14_concours"); view.pop()
         val bs = BreedingScreen(view); view.push(bs)

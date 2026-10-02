@@ -23,9 +23,9 @@ enum class Exercise(
         "Transitions, cercles, incurvation : la base de tout."),
     DRESSAGE("Reprise de dressage", 50, mapOf(Discipline.DRESSAGE to 1.7f, Discipline.COMPLET to 0.3f), 1.5f, 26f, 0.003f, 4f, true, BuildingType.CARRIERE,
         "Figures de la reprise, appuyers, changements de pied, rassembler."),
-    GYMNASTIQUE("Gymnastique à l'obstacle", 40, mapOf(Discipline.CSO to 1.3f, Discipline.COMPLET to 0.5f), 1.8f, 28f, 0.006f, 4f, true, BuildingType.CARRIERE,
+    GYMNASTIQUE("Gymnastique à l'obstacle", 40, mapOf(Discipline.CSO to 1.3f, Discipline.COMPLET to 0.5f, Discipline.HUNTER to 1.1f), 1.8f, 28f, 0.006f, 4f, true, BuildingType.CARRIERE,
         "Lignes de cavalettis et de petits sauts : technique et respect."),
-    PARCOURS("Parcours d'obstacles", 40, mapOf(Discipline.CSO to 1.7f, Discipline.COMPLET to 0.4f), 2f, 34f, 0.009f, 4f, true, BuildingType.CARRIERE,
+    PARCOURS("Parcours d'obstacles", 40, mapOf(Discipline.CSO to 1.7f, Discipline.COMPLET to 0.4f, Discipline.HUNTER to 1.2f), 2f, 34f, 0.009f, 4f, true, BuildingType.CARRIERE,
         "Enchaîner un parcours complet comme en concours."),
     CROSS("Entraînement de cross", 50, mapOf(Discipline.COMPLET to 1.8f, Discipline.CSO to 0.2f, Discipline.ENDURANCE to 0.3f), 2.6f, 38f, 0.011f, 5f, true, BuildingType.CROSS,
         "Troncs, gué, talus et fossés au galop."),
@@ -36,13 +36,20 @@ enum class Exercise(
     FOND("Travail de fond", 120, mapOf(Discipline.ENDURANCE to 1.8f, Discipline.COMPLET to 0.3f), 3f, 42f, 0.008f, 5f, true, null,
         "Longues sorties à allure régulière, contrôle de la fréquence cardiaque."),
     ATTELAGE("Travail à l'attelage", 60, mapOf(Discipline.ATTELAGE to 1.8f), 1.8f, 26f, 0.004f, 4f, false, BuildingType.CARRIERE,
-        "Menés à la voiture : dressage attelé, maniabilité et marathon.");
+        "Menés à la voiture : dressage attelé, maniabilité et marathon."),
+    SULKY("Entraînement au sulky", 40, mapOf(Discipline.TROT_ATTELE to 1.8f, Discipline.ATTELAGE to 0.3f), 2.4f, 34f, 0.009f, 2f, false, BuildingType.PISTE,
+        "Trot rapide attelé au sulky d'entraînement : vitesse sans se mettre au galop."),
+    WESTERN("Travail western", 45, mapOf(Discipline.WESTERN to 1.7f, Discipline.DRESSAGE to 0.2f), 1.9f, 28f, 0.006f, 4f, true, BuildingType.CARRIERE,
+        "Départs arrêtés, tours de tonneaux, demi-tours sur les hanches."),
+    TRAVAIL_PIED("Travail à pied", 30, emptyMap(), 0.4f, 8f, 0.001f, 1f, false, null,
+        "Exercices de désensibilisation (bâche, ballon, parapluie) : la confiance grandit.");
 
     companion object {
         /** Exercice principal à programmer pour une discipline. */
         fun forDiscipline(d: Discipline): Exercise = when (d) {
             Discipline.CSO -> PARCOURS; Discipline.DRESSAGE -> DRESSAGE; Discipline.COMPLET -> CROSS
             Discipline.COURSE -> GALOP; Discipline.ENDURANCE -> FOND; Discipline.ATTELAGE -> ATTELAGE; Discipline.MODELE -> LONGE
+            Discipline.HUNTER -> GYMNASTIQUE; Discipline.TROT_ATTELE -> SULKY; Discipline.WESTERN -> WESTERN
         }
     }
 }

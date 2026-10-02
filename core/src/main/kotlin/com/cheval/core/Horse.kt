@@ -19,7 +19,10 @@ enum class Discipline(val label: String, val short: String) {
     COURSE("Course de plat", "Course"),
     ENDURANCE("Endurance", "Endurance"),
     ATTELAGE("Attelage", "Attelage"),
-    MODELE("Modèle et allures", "Modèle");
+    MODELE("Modèle et allures", "Modèle"),
+    HUNTER("Hunter", "Hunter"),
+    TROT_ATTELE("Trot attelé", "Trot"),
+    WESTERN("Western (barrel race)", "Western");
 
     /** Potentiel génétique pour la discipline (pondération des caractères). */
     fun potential(h: Horse): Float = when (this) {
@@ -30,6 +33,12 @@ enum class Discipline(val label: String, val short: String) {
         ENDURANCE -> h.pot(Trait.ENDURANCE) * 0.55f + h.pot(Trait.ROBUSTESSE) * 0.2f + h.pot(Trait.CALME) * 0.15f + h.pot(Trait.VITESSE) * 0.1f
         ATTELAGE -> h.pot(Trait.FORCE) * 0.35f + h.pot(Trait.CALME) * 0.25f + h.pot(Trait.ALLURES) * 0.2f + h.pot(Trait.ENDURANCE) * 0.2f
         MODELE -> h.pot(Trait.MODELE) * 0.6f + h.pot(Trait.ALLURES) * 0.4f
+        HUNTER -> h.pot(Trait.SAUT) * 0.25f + h.pot(Trait.ALLURES) * 0.25f + h.pot(Trait.CALME) * 0.25f + h.pot(Trait.TECHNIQUE) * 0.25f
+        // Le trot de course est une aptitude de race : le Trotteur est sélectionné pour ça depuis 150 ans.
+        TROT_ATTELE -> h.pot(Trait.VITESSE) * 0.4f + h.pot(Trait.ENDURANCE) * 0.25f + h.pot(Trait.ALLURES) * 0.2f + h.pot(Trait.CALME) * 0.15f +
+            (if (h.breed == Breed.TROTTEUR) 16f else if (h.breed == Breed.ISLANDAIS || h.breed == Breed.FRISON) 2f else -10f)
+        WESTERN -> h.pot(Trait.VITESSE) * 0.3f + h.pot(Trait.FORCE) * 0.25f + h.pot(Trait.APPRENTISSAGE) * 0.2f + h.pot(Trait.CALME) * 0.25f +
+            (if (h.breed == Breed.QUARTER_HORSE || h.breed == Breed.PAINT_HORSE || h.breed == Breed.APPALOOSA) 10f else 0f)
     }
 
     val trainable get() = this != MODELE
@@ -105,6 +114,8 @@ class Horse(
     var hooves = 85f
     var teeth = 85f
     var bond = 20f
+    /** Confiance en soi et en son cavalier : se gagne par le travail à pied, le pansage, les réussites. */
+    var confidence = 40f
     var stress = 10f
     /** Note d'état corporel (échelle de Henneke 1 à 9, idéal 5). */
     var bcs = 5f
@@ -202,6 +213,9 @@ class Horse(
         return Coat.look(genome, age(today), shine)
     }
 
+    /** Force : condition physique et musculature (affichée comme dans les jeux d'écurie). */
+    val strength: Float get() = (fitness * 0.55f + muscle * 0.45f).coerceIn(0f, 100f)
+
     fun hasAilment(t: AilmentType) = ailments.any { it.type == t }
     val injured get() = ailments.any { !it.type.work }
     val pain: Float get() = ailments.maxOfOrNull { it.type.pain * it.severity } ?: 0f
@@ -266,7 +280,8 @@ class Horse(
         val m = (morale / 100f).coerceIn(0f, 1f)
         val f = fitness / 100f
         val body = 1f - (abs(bcs - 5.2f) / 4f).coerceIn(0f, 0.5f)
-        return (0.55f + e * 0.15f + m * 0.1f + f * 0.2f) * body * (1f - pain * 0.6f)
+        val conf = (confidence / 100f).coerceIn(0f, 1f)
+        return (0.5f + e * 0.14f + m * 0.08f + f * 0.18f + conf * 0.1f) * body * (1f - pain * 0.6f)
     }
 
     fun summaryStatus(today: Int): String = when {
@@ -298,7 +313,7 @@ class Horse(
         "res" to results.map { it.toJson() }, "earn" to earnings, "pp" to purchasePrice, "acq" to acquiredDay,
         "fs" to forSale, "ap" to askingPrice, "no" to notes, "ti" to titles,
         "eat" to listOf(hayRack, bucket, riskAcc, eatHay, eatFeed, eatGrass, hungryHours.toFloat()),
-        "plan" to plan?.name, "ps" to planSessions, "lx" to lastExercise, "st" to sessionsToday,
+        "conf" to confidence, "plan" to plan?.name, "ps" to planSessions, "lx" to lastExercise, "st" to sessionsToday,
     )
 
     companion object {
@@ -326,6 +341,7 @@ class Horse(
             h.titles = ArrayList(o.list("ti").filterIsInstance<String>())
             val e = o.floats("eat")
             if (e.size >= 7) { h.hayRack = e[0]; h.bucket = e[1]; h.riskAcc = e[2]; h.eatHay = e[3]; h.eatFeed = e[4]; h.eatGrass = e[5]; h.hungryHours = e[6].toInt() }
+            h.confidence = o.float("conf", 40f)
             h.plan = o.strOrNull("plan")?.let { n -> Discipline.values().firstOrNull { it.name == n } }
             h.planSessions = o.int("ps", 4); h.lastExercise = o.str("lx"); h.sessionsToday = o.int("st")
             return h

@@ -42,7 +42,7 @@ class NewGameScreen(app: GameView) : Screen(app) {
         gui.button(c, RectF(372f * u, top + 2f * u, 520f * u, top + 28f * u), game.rider.name, size = 12.5f) {
             app.askText("Votre prénom", game.rider.name) { game.rider.name = it }
         }
-        gui.text(c, "Départ le ${Cal.format(game.day)} · ${fmtMoney(game.money)} · 6 boxes · 4 ha de prairie · un palefrenier", w - 16f * u, top + 18f * u, 10.5f, Pal.INK_L, Paint.Align.RIGHT, maxW = w - 540f * u)
+        gui.text(c, "Départ le ${Cal.format(game.day)} · ${fmtMoney(game.money)} · une caravane, un vieil abri de 2 boxes et un domaine à remettre en état", w - 16f * u, top + 18f * u, 10.5f, Pal.INK_L, Paint.Align.RIGHT, maxW = w - 540f * u)
         // trois cartes
         val cardTop = top + 38f * u
         val cardH = h - cardTop - 60f * u

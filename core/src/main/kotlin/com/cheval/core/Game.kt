@@ -57,6 +57,13 @@ class Game(seed: Long, var stableName: String = "Haras de la Baie") {
     var generatedUntil = -1
     var wins = 0
     var unread = 0
+    /** Compteurs pour les objectifs, objectifs réclamés, déchets restants, cours donnés aujourd'hui. */
+    val stats = HashMap<String, Int>()
+    val goalsDone = HashSet<String>()
+    val junk = ArrayList<Junk>()
+    var lessonsToday = 0
+    fun stat(k: String, n: Int = 1) { stats[k] = (stats[k] ?: 0) + n }
+
     /** Concours du jour où le joueur doit monter en direct : (eventId, horseId). */
     val pendingLive = ArrayList<Pair<Int, Int>>()
 
@@ -64,7 +71,8 @@ class Game(seed: Long, var stableName: String = "Haras de la Baie") {
 
     fun owned(): List<Horse> = horses.values.filter { it.owned && it.alive }
     fun level(b: BuildingType) = levels[b.ordinal]
-    fun boxes() = level(BuildingType.ECURIE) * 6
+    /** Niveau 0 : le vieil abri de 2 boxes trouvé à l'arrivée. */
+    fun boxes() = if (level(BuildingType.ECURIE) == 0) 2 else level(BuildingType.ECURIE) * 6
     fun hectares() = level(BuildingType.PRE) * 4
     fun stockCap(): Float = 4000f + level(BuildingType.GRENIER) * 6000f
     fun staffOf(r: Role) = staff.filter { it.role == r }
@@ -76,22 +84,92 @@ class Game(seed: Long, var stableName: String = "Haras de la Baie") {
 
     // ===================================================================== Création
 
-    fun newGameSetup() {
-        levels[BuildingType.ECURIE.ordinal] = 1
+    /**
+     * Nouvelle partie : un domaine à l'abandon racheté pour une bouchée de pain. Une caravane pour dormir,
+     * un vieil abri de deux boxes, une prairie envahie de déchets… et tout à reconstruire.
+     */
+    fun newGameSetup(withStaff: Boolean = false) {
+        money = 6000
+        levels[BuildingType.ECURIE.ordinal] = 0
         levels[BuildingType.PRE.ordinal] = 1
         levels[BuildingType.GRENIER.ordinal] = 1
-        stock[Item.FOIN.ordinal] = 2500f
-        stock[Item.GRANULES.ordinal] = 300f
-        stock[Item.PAILLE.ordinal] = 60f
-        stock[Item.CAROTTES.ordinal] = 10f
-        stock[Item.MINERAUX.ordinal] = 90f
+        stock[Item.FOIN.ordinal] = 900f
+        stock[Item.GRANULES.ordinal] = 80f
+        stock[Item.PAILLE.ordinal] = 20f
+        stock[Item.CAROTTES.ordinal] = 5f
+        stock[Item.MINERAUX.ordinal] = 30f
         weather.next(0, rng)
-        staff += Staff(nextId++, Names.person(rng), Role.PALEFRENIER, 2, 1150)
+        if (withStaff) staff += Staff(nextId++, Names.person(rng), Role.PALEFRENIER, 2, 1150)
+        val spots = listOf(0.08f to 0.62f, 0.2f to 0.78f, 0.33f to 0.7f, 0.47f to 0.82f, 0.58f to 0.66f, 0.71f to 0.8f, 0.86f to 0.7f, 0.93f to 0.86f)
+        for ((i, xy) in spots.withIndex()) junk += Junk(nextId++, i % Junk.KINDS.size, rng.range(1f, 2.5f), xy.first, xy.second)
         refreshCandidates()
         ensureEvents()
         refreshStuds(full = true)
         repeat(14) { addListing() }
-        log("Bienvenue au $stableName ! Votre palefrenier vous attend dans la cour.", MsgKind.GOOD)
+        log("Bienvenue au $stableName ! Le domaine a besoin de bras : nettoyez, restaurez, et prenez soin de votre cheval.", MsgKind.GOOD)
+    }
+
+    // ===================================================================== Journée de travail
+    val dayStart get() = 7f
+    val dayEnd get() = 21f
+    fun hoursLeft(): Float = (dayEnd - hourOfDay).coerceAtLeast(0f)
+
+    /** Consomme du temps de la journée ; refuse si la journée est trop avancée. */
+    fun spend(hours: Float): Boolean {
+        if (hours <= 0f) return true
+        if (hourOfDay + hours > dayEnd + 0.01f || hourOfDay < dayStart - 0.01f) return false
+        advance(hours.toDouble())
+        return true
+    }
+
+    fun cleanJunk(id: Int): Res {
+        val j = junk.firstOrNull { it.id == id } ?: return Res.no("")
+        if (!spend(j.hours)) return Res.no("Il ne reste pas assez de temps aujourd'hui (${fmt1(j.hours)} h nécessaires).")
+        junk.remove(j)
+        stat(St.JUNK)
+        reputation = (reputation + 0.5f).coerceAtMost(100f)
+        val loot = when (rng.int(5)) {
+            0 -> { earn(rng.range(20, 120), "Ferraille revendue", "Divers"); " Vous revendez un peu de ferraille." }
+            1 -> if (j.kind == 3) { stock[Item.PAILLE.ordinal] += 4f; " Il restait quelques bottes de paille utilisables !" } else ""
+            2 -> if (j.kind == 0 || j.kind == 1) { earn(rng.range(60, 260), "Vieille selle retrouvée et revendue", "Divers"); " Sous la ferraille : une vieille selle, revendue !" } else ""
+            else -> ""
+        }
+        return Res.ok("${j.label} : débarrassé en ${fmt1(j.hours)} h.$loot")
+    }
+
+    /** Élèves présents à un cours : selon la réputation, les installations et le nombre de chevaux. */
+    fun lessonStudents(horses: Int): Int = (1 + (reputation / 12f).toInt() + level(BuildingType.CARRIERE) + level(BuildingType.CLUB_HOUSE) * 2).coerceAtMost(horses * 2).coerceAtLeast(1)
+
+    fun lessonPrice(): Int = 18 + level(BuildingType.CARRIERE) * 4 + level(BuildingType.MANEGE) * 6 + level(BuildingType.CLUB_HOUSE) * 5
+
+    /** Le joueur donne un cours d'équitation avec les chevaux choisis (1 h 30). */
+    fun giveLesson(horses: List<Horse>): Res {
+        if (horses.isEmpty()) return Res.no("Choisissez au moins un cheval.")
+        if (lessonsToday >= 3) return Res.no("Trois cours par jour, c'est déjà beaucoup !")
+        horses.firstOrNull { !it.backed || it.injured || it.energy < 25f || it.place == Place.DEPLACEMENT }?.let { return Res.no("${it.name} ne peut pas travailler (${if (!it.backed) "non débourré" else if (it.injured) "blessé" else "trop fatigué"}).") }
+        if (weather.harsh && level(BuildingType.MANEGE) == 0) return Res.no("Personne ne vient monter par ce temps sans manège couvert.")
+        if (!spend(1.5f)) return Res.no("Plus assez de temps aujourd'hui (1 h 30 nécessaire).")
+        val students = lessonStudents(horses.size)
+        val calm = horses.map { (it.pot(Trait.CALME) + it.confidence) / 2f }.average().toFloat()
+        val satisfaction = (calm / 100f + reputation / 200f).coerceIn(0.2f, 1.2f)
+        val income = (students * lessonPrice() * (0.8f + satisfaction * 0.3f)).toInt()
+        earn(income, "Cours d'équitation ($students élèves)", "Club")
+        for (h in horses) { h.energy -= 14f; h.workToday += 60f; h.fitness = min(80f, h.fitness + 0.5f); h.confidence = min(100f, h.confidence + 0.5f) }
+        lessonsToday++
+        stat(St.LESSON)
+        rider.hoursRidden += 0.5f
+        reputation = (reputation + 0.25f * satisfaction).coerceAtMost(100f)
+        val mood = when { satisfaction > 0.9f -> "ravis"; satisfaction > 0.6f -> "contents"; else -> "un peu déçus" }
+        return Res.ok("$students élèves, $mood : ${fmtMoney(income)} encaissés.")
+    }
+
+    fun claimGoal(goal: Goal): Res {
+        if (goal.id in goalsDone || !goal.done(this)) return Res.no("Objectif pas encore atteint.")
+        goalsDone += goal.id
+        earn(goal.reward, "Objectif atteint : ${goal.title}", "Objectifs")
+        reputation = (reputation + goal.rep).coerceAtMost(100f)
+        log("Objectif accompli : ${goal.title} ! (+${fmtMoney(goal.reward)})", MsgKind.GOOD)
+        return Res.ok("${goal.title} : +${fmtMoney(goal.reward)}")
     }
 
     /** Trois chevaux de départ proposés au joueur (il en choisit un, offert). */
@@ -212,6 +290,7 @@ class Game(seed: Long, var stableName: String = "Haras de la Baie") {
         if (boxUsers() >= boxes()) return Res.no("Plus de box libre : agrandissez l'écurie ou vendez un cheval.")
         market.remove(l)
         pay(l.price, "Achat de ${h.name}", "Chevaux")
+        stat(St.BUY)
         acquire(h, l.price)
         h.place = Place.BOX
         log("${h.name} rejoint le domaine. Pensez à vérifier ses vaccins et son ferrage.", MsgKind.GOOD, h.id)
@@ -247,6 +326,7 @@ class Game(seed: Long, var stableName: String = "Haras de la Baie") {
         val p = (value(h) * 0.65f).roundTo(50)
         removeFromStable(h)
         earn(p, "Vente de ${h.name} à un marchand", "Chevaux")
+        stat(St.SALE)
         log("${h.name} a été vendu à un marchand pour ${fmtMoney(p)}.", MsgKind.INFO, h.id)
         return Res.ok("Vendu ${fmtMoney(p)}")
     }
@@ -263,6 +343,7 @@ class Game(seed: Long, var stableName: String = "Haras de la Baie") {
         offers.remove(o)
         removeFromStable(h)
         earn(o.amount, "Vente de ${h.name} à ${o.buyer}", "Chevaux")
+        stat(St.SALE)
         reputation = (reputation + 1f).coerceAtMost(100f)
         log("${h.name} part chez ${o.buyer} (${fmtMoney(o.amount)}). Bonne route !", MsgKind.GOOD, h.id)
         return Res.ok("Vente conclue.")
@@ -336,6 +417,7 @@ class Game(seed: Long, var stableName: String = "Haras de la Baie") {
         if (money < cost) return Res.no("Fonds insuffisants (${fmtMoney(cost)}).")
         if (cost > 0) pay(cost, "Saillie ${stallion.name} × ${mare.name}${if (followUp) " + suivi gynéco" else ""}", "Élevage")
         mare.lastCovered = day
+        stat(St.COVER)
         val heat = mare.inHeat(day)
         val ageF = when { mare.age(day) < 15 -> 1f; mare.age(day) < 20 -> 0.72f; else -> 0.4f }
         val bcsF = if (mare.bcs in 4.5f..7f) 1f else 0.75f
@@ -371,6 +453,7 @@ class Game(seed: Long, var stableName: String = "Haras de la Baie") {
         foal.acquiredDay = day
         foal.ration = Ration(1f, 0.5f, true)
         mare.foalsBorn++
+        stat(St.FOAL)
         // Poulinage : la nuit, comme dans la nature. Risque de dystocie réduit par le box de poulinage et la surveillance.
         val watched = level(BuildingType.POULINAGE) > 0 || staffOf(Role.SOIGNEUR).isNotEmpty()
         val dystocia = rng.chance(if (mare.foalsBorn == 1) 0.06f else 0.04f)
@@ -418,6 +501,7 @@ class Game(seed: Long, var stableName: String = "Haras de la Baie") {
         if (count(Item.FOIN) < hay) return Res.no("Plus assez de foin ! Commandez-en dans la gestion des stocks.")
         giveMeal(h, hay, fd)
         h.bond += 0.5f
+        stat(St.FEED)
         return Res.ok("${h.name} mange : ${fmt1(hay)} kg de foin${if (fd > 0) " et ${fmt1(fd)} kg de granulés" else ""}.")
     }
 
@@ -456,6 +540,8 @@ class Game(seed: Long, var stableName: String = "Haras de la Baie") {
             h.morale = min(100f, h.morale + 6f * q)
             h.stress = max(0f, h.stress - 8f)
         }
+        stat(St.GROOM)
+        h.confidence = min(100f, h.confidence + 1f + q)
         // On cure les pieds pendant le pansage : prévient abcès et pourriture de fourchette
         h.hooves = min(100f, h.hooves + 1f)
         rider.hoursRidden += 0.05f
@@ -623,7 +709,14 @@ class Game(seed: Long, var stableName: String = "Haras de la Baie") {
         if (h.lastExercise != ex.name) h.morale = min(100f, h.morale + 3f)
         h.lastExercise = ex.name
         if (ex == Exercise.EXTERIEUR) { h.morale = min(100f, h.morale + 10f); h.stress = max(0f, h.stress - 10f) }
+        stat(St.TRAIN)
+        when (ex) {
+            Exercise.TRAVAIL_PIED -> h.confidence = min(100f, h.confidence + 4f * quality)
+            Exercise.MANIPULATION, Exercise.LONGE -> h.confidence = min(100f, h.confidence + 1.5f * quality)
+            else -> h.confidence = (h.confidence + (quality - 0.55f) * 3f).coerceIn(0f, 100f)
+        }
         if (byPlayer) {
+            if (ex.ridden) stat(St.RIDE)
             h.bond = min(100f, h.bond + 2f)
             rider.hoursRidden += minutes / 60f
             for ((d, w) in ex.gains) rider.xp[d.ordinal] = min(60f, rider.xp[d.ordinal] + w * 0.25f * dur * (1f - rider.xp[d.ordinal] / 70f))
@@ -697,6 +790,7 @@ class Game(seed: Long, var stableName: String = "Haras de la Baie") {
         canEnter(e, h, riderId)?.let { return Res.no(it) }
         if (!payIfCan(e.fee, "Engagement ${h.name} — ${e.name}", "Concours")) return Res.no("Fonds insuffisants")
         e.entries += Entry(h.id, riderId, live && riderId == -1)
+        stat(St.ENTRY)
         return Res.ok("${h.name} est engagé : ${e.name}, le ${Cal.formatShort(e.day)}.")
     }
 
@@ -746,8 +840,16 @@ class Game(seed: Long, var stableName: String = "Haras de la Baie") {
         if (rng.chance(injuryRisk)) addAilment(h, if (rng.chance(0.3f)) AilmentType.TENDINITE else AilmentType.BOITERIE)
         val repGain = when { rank == 1 -> 1.5f + e.level * 0.8f; rank <= 3 -> 0.6f + e.level * 0.3f; rank <= of / 4 -> 0.2f; else -> 0f }
         reputation = (reputation + repGain).coerceAtMost(100f)
+        if (rank <= 3 && score > -999f) {
+            stat(St.PODIUM)
+            h.confidence = min(100f, h.confidence + 4f)
+        }
         if (rank == 1) {
             wins++
+            stat(St.WIN)
+            if (e.level >= 1) stat(St.WIN_AMATEUR)
+            if (e.level >= 3) stat(St.WIN_PRO)
+            if (e.level >= 5) stat(St.WIN_GP)
             if (e.level >= 4) h.titles += "Vainqueur ${e.name} (${Cal.date(day).year})"
         }
         val kind = if (rank <= 3 && score > -999f) MsgKind.GOOD else MsgKind.INFO
@@ -809,6 +911,7 @@ class Game(seed: Long, var stableName: String = "Haras de la Baie") {
     fun hire(s: Staff): Res {
         if (staff.size >= 3 + level(BuildingType.ECURIE) * 2) return Res.no("Pas assez de logements pour le personnel : agrandissez l'écurie.")
         candidates.remove(s); staff += s
+        stat(St.HIRE)
         log("${s.name} rejoint l'équipe comme ${s.role.label.lowercase()}.", MsgKind.GOOD)
         return Res.ok("${s.name} est embauché (${fmtMoney(s.salary)}/mois).")
     }
@@ -826,6 +929,7 @@ class Game(seed: Long, var stableName: String = "Haras de la Baie") {
         val cost = b.cost(lvl + 1)
         if (!payIfCan(cost, "Travaux : ${b.label} niveau ${lvl + 1}", "Travaux")) return Res.no("Fonds insuffisants (${fmtMoney(cost)})")
         levels[b.ordinal]++
+        stat(St.BUILD)
         log("Les travaux sont terminés : ${b.label}${if (b.maxLevel > 1) " niveau ${levels[b.ordinal]}" else ""} !", MsgKind.GOOD)
         return Res.ok("${b.label} construit.")
     }
@@ -925,6 +1029,7 @@ class Game(seed: Long, var stableName: String = "Haras de la Baie") {
 
     /** Avance jusqu'au lendemain matin 7 h. */
     fun sleepUntilMorning() {
+        stat(St.DAYS)
         val target = (day + 1) * 24.0 + 7.0
         advance(target - time)
     }
@@ -975,7 +1080,9 @@ class Game(seed: Long, var stableName: String = "Haras de la Baie") {
             } else {
                 var ate = 0f
                 if (x.place == Place.PRE && grassF > 0.08f) {
-                    val kg = 0.6f * grassF * (if (night) 0.6f else 1f)
+                    // Un cheval trop gros porte une muselière de pâturage (mise par le soigneur).
+                    val muzzle = x.bcs > 6.8f && staffOf(Role.SOIGNEUR).isNotEmpty()
+                    val kg = 0.6f * grassF * (if (night) 0.6f else 1f) * (if (muzzle) 0.35f else 1f)
                     x.eatGrass += kg; ate += kg
                     grass = max(0f, grass - kg * 0.06f / max(1, hectares()))
                     if (x.bcs > 6.5f && Cal.month(day) in 3..5 && rng.chance(0.0006f * (x.bcs - 6f))) addAilment(x, AilmentType.FOURBURE)
@@ -1103,6 +1210,7 @@ class Game(seed: Long, var stableName: String = "Haras de la Baie") {
     }
 
     private fun newDay() {
+        lessonsToday = 0
         weather.next(day, rng)
         if (weather.sky != Sky.SOLEIL || weather.tempMax > 0) {
             val m = Cal.month(day)
@@ -1309,6 +1417,7 @@ class Game(seed: Long, var stableName: String = "Haras de la Baie") {
         "stock" to stock.toList(), "events" to events.map { it.toJson() }, "msgs" to messages.map { it.toJson() },
         "ledger" to ledger.map { it.toJson() }, "offers" to offers.map { it.toJson() }, "w" to weather.toJson(), "grass" to grass,
         "rider" to rider.toJson(), "boarders" to boarders, "nid" to nextId, "gu" to generatedUntil, "wins" to wins, "unread" to unread,
+        "stats" to stats, "goals" to goalsDone.toList(), "junk" to junk.map { it.toJson() }, "lt" to lessonsToday,
     ))
 
     companion object {
@@ -1334,6 +1443,10 @@ class Game(seed: Long, var stableName: String = "Haras de la Baie") {
             g.offers.addAll(o.objs("offers").map { Offer.fromJson(it) })
             o.obj("w")?.let { g.weather = Weather.fromJson(it) }
             g.grass = o.float("grass", 70f); g.rider = Rider.fromJson(o.obj("rider")); g.boarders = o.int("boarders")
+            o.obj("stats")?.m?.forEach { (k, v) -> (v as? Double)?.let { g.stats[k] = it.toInt() } }
+            g.goalsDone.addAll(o.list("goals").filterIsInstance<String>())
+            g.junk.addAll(o.objs("junk").map { Junk.fromJson(it) })
+            g.lessonsToday = o.int("lt")
             g.nextId = o.int("nid", 1); g.generatedUntil = o.int("gu", -1); g.wins = o.int("wins"); g.unread = o.int("unread")
             return g
         }
