@@ -12,3 +12,4 @@ captures/
 *.dex
 tools/local-check/out/
 tools/local-check/debug.keystore
+.kotlin/
