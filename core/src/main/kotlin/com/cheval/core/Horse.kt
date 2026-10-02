@@ -252,7 +252,7 @@ class Horse(
         if (!mare || pregnancy != null || age(today) < 2.5f || !alive) return false
         val m = Cal.month(today)
         if (m !in 2..8) return false
-        return Math.floorMod(today + cycleOffset, 21) < 6
+        return ((today + cycleOffset).mod(21)) < 6
     }
 
     fun nextHeat(today: Int): Int {

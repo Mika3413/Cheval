@@ -20,8 +20,8 @@ object Cal {
 
     fun date(day: Int): Date {
         val abs = day + OFFSET
-        val year = START_YEAR + Math.floorDiv(abs, 365)
-        var doy = Math.floorMod(abs, 365)
+        val year = START_YEAR + ((abs).floorDiv(365))
+        var doy = ((abs).mod(365))
         val dayOfYear = doy
         var m = 0
         while (doy >= LEN[m]) { doy -= LEN[m]; m++ }
@@ -36,8 +36,8 @@ object Cal {
     }
 
     fun month(day: Int) = date(day).month
-    fun weekday(day: Int) = WEEKDAYS[Math.floorMod(day + DAY0_DOW, 7)]
-    fun isWeekend(day: Int) = Math.floorMod(day + DAY0_DOW, 7) >= 5
+    fun weekday(day: Int) = WEEKDAYS[((day + DAY0_DOW).mod(7))]
+    fun isWeekend(day: Int) = ((day + DAY0_DOW).mod(7)) >= 5
 
     fun format(day: Int): String { val d = date(day); return "${d.dom} ${MONTHS[d.month]} ${d.year}" }
     fun formatShort(day: Int): String { val d = date(day); return "${d.dom} ${MONTHS_SHORT[d.month]}" }
@@ -107,7 +107,7 @@ class Weather(
         val m = Cal.month(day)
         val meanMax = MEAN_MAX[m]; val meanMin = MEAN_MIN[m]
         // persistance : la journée ressemble à la veille
-        val anomaly = ((tempMax - MEAN_MAX[Math.floorMod(m, 12)]) * 0.6f + rng.gauss(0.0, 2.6).toFloat())
+        val anomaly = ((tempMax - MEAN_MAX[((m).mod(12))]) * 0.6f + rng.gauss(0.0, 2.6).toFloat())
         tempMax = meanMax + anomaly
         tempMin = min(tempMax - 3f, meanMin + anomaly * 0.8f + rng.gauss(0.0, 1.2).toFloat())
         val wasRainy = rainy

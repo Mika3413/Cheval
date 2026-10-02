@@ -240,6 +240,7 @@ object Coat {
                 else -> mix(body, rgb(214, 182, 128), 0.55f)
             }
         }
+        if (chestnut) points = body
         val grey = greyLevel(g, age)
         val dapples = if (grey in 0.15f..0.75f) 1f - kotlin.math.abs(grey - 0.45f) / 0.3f else 0f
         if (grey > 0f) {

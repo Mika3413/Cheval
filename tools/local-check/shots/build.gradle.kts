@@ -16,7 +16,6 @@ sourceSets {
 val roboRuntime by configurations.creating
 
 dependencies {
-    roboRuntime("org.robolectric:android-all-instrumented:14-robolectric-10818077-i7") { isTransitive = false }
     roboRuntime("org.robolectric:android-all-instrumented:15-robolectric-12650502-i7") { isTransitive = false }
     testImplementation("junit:junit:4.13.2")
     // androidx.test vient de maven.google.com (inaccessible ici) : on s'en passe.

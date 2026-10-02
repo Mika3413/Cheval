@@ -3,7 +3,7 @@ package com.cheval.core
 object Names {
     /** Lettre de l'année de naissance (SIRE/IFCE) : cycle de 20 lettres sans K, Q, W, X, Y, Z ; 2010 = A. */
     private const val LETTERS = "ABCDEFGHIJLMNOPRSTUV"
-    fun yearLetter(year: Int): Char = LETTERS[Math.floorMod(year - 2010, LETTERS.length)]
+    fun yearLetter(year: Int): Char = LETTERS[((year - 2010).mod(LETTERS.length))]
 
     private val ROOTS = mapOf(
         'A' to listOf("Altesse", "Apollon", "Azur", "Arpège", "Aquila", "Ambre", "Atlas", "Aube"),

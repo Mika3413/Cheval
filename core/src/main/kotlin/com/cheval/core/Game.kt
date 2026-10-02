@@ -1049,7 +1049,7 @@ class Game(seed: Long, var stableName: String = "Haras de la Baie") {
             x.rugged = (x.clipped && cold) || (cold && weather.rainy && Personality.FRILEUX in x.personality) || (x.age(day) > 22 && cold)
         }
         // Le soigneur ajuste les rations chaque lundi selon l'état corporel
-        if (carers.isNotEmpty() && Math.floorMod(day, 7) == 0) for (x in owned) if (x.weaned) {
+        if (carers.isNotEmpty() && ((day).mod(7)) == 0) for (x in owned) if (x.weaned) {
             if (x.bcs > 6.3f && (x.ration.feed > 0f || x.ration.hay > x.weight(day) * 0.0155f)) {
                 // On réduit d'abord les concentrés ; le fourrage ne descend jamais sous 1,5 % du poids.
                 val hay = if (x.ration.feed > 0f) x.ration.hay else max(x.weight(day) * 0.015f, x.ration.hay - 0.5f)
@@ -1060,7 +1060,7 @@ class Game(seed: Long, var stableName: String = "Haras de la Baie") {
         }
         // Cavaliers : travail selon le programme de chaque cheval
         val riders = staffOf(Role.CAVALIER) + staffOf(Role.LAD)
-        val weekday = Math.floorMod(day, 7)
+        val weekday = ((day).mod(7))
         var slots = riders.sumOf { 4 + it.skill / 2 }
         for (x in owned.filter { it.plan != null }.sortedByDescending { it.skills.maxOrNull() ?: 0f }) {
             if (slots <= 0) break
