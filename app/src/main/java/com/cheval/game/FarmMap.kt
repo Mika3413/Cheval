@@ -112,6 +112,7 @@ class FarmMapArt {
     }
 
     private fun paintStatic(c: Canvas, g: Game, amb: Ambience) {
+        // (la saison est celle du jour : fleurs, feuillage, neige)
         val day = Ambience(12f, amb.season, com.cheval.core.Sky.SOLEIL, 6f, 21f, 15f, 10f, amb.snowGround)
         val W = mapW; val H = mapH
         // ciel
@@ -154,11 +155,43 @@ class FarmMapArt {
         dirtPath(c, floatArrayOf(0.22f, 0.5f, 0.17f, 0.44f), 6f)
         // tufts d'herbe
         val rt = Rng(9)
-        repeat(700) {
+        val tuftD = HorseArt.alpha(HorseArt.shade(grass, 0.55f), 0.7f)
+        val tuftL = HorseArt.alpha(HorseArt.lighten(grass, 0.3f), 0.6f)
+        repeat(1400) {
             val x = rt.float() * W; val y = H * (0.3f + rt.float() * 0.7f)
             val s = depthScale(y) * k
-            Ink.line(c, x, y, x - 1.5f * s, y - 4f * s, 0.7f * s, HorseArt.alpha(HorseArt.shade(grass, 0.55f), 0.7f))
-            Ink.line(c, x + 1.5f * s, y, x + 3f * s, y - 3.5f * s, 0.7f * s, HorseArt.alpha(HorseArt.shade(grass, 0.55f), 0.7f))
+            val big = rt.chance(0.25f)
+            val hgt = if (big) 6.5f else 4f
+            Ink.line(c, x, y, x - 1.5f * s, y - hgt * s, 0.7f * s, tuftD)
+            Ink.line(c, x + 1.5f * s, y, x + 3f * s, y - hgt * 0.9f * s, 0.7f * s, tuftD)
+            if (big) { Ink.line(c, x + 0.7f * s, y, x + 0.9f * s, y - hgt * 1.1f * s, 0.6f * s, tuftD); Ink.line(c, x - 2.5f * s, y, x - 4f * s, y - hgt * 0.6f * s, 0.6f * s, tuftL) }
+        }
+        // fleurs des champs (pâquerettes, boutons d'or, trèfle) et cailloux
+        if (amb.season != Season.HIVER && !amb.snowGround) {
+            val rf = Rng(13)
+            val n = if (amb.season == Season.PRINTEMPS) 520 else if (amb.season == Season.ETE) 360 else 120
+            repeat(n) {
+                val cx = rf.float() * W; val cy = H * (0.31f + rf.float() * 0.69f)
+                // en petites colonies
+                val colony = rf.range(2, 5); val kind = rf.range(0, 3)
+                repeat(colony) {
+                    val x = cx + rf.range(-8f, 8f) * k; val y = cy + rf.range(-3f, 3f) * k
+                    val s = depthScale(y) * k
+                    when (kind) {
+                        0 -> { c.drawCircle(x, y, 1.4f * s, Ink.fill(Color.rgb(250, 248, 240))); c.drawCircle(x, y, 0.6f * s, Ink.fill(Color.rgb(240, 200, 60))) }
+                        1 -> c.drawCircle(x, y, 1.1f * s, Ink.fill(Color.rgb(246, 214, 60)))
+                        else -> { c.drawCircle(x, y, 1.2f * s, Ink.fill(Color.rgb(222, 150, 180))); c.drawCircle(x + 0.5f * s, y - 0.5f * s, 0.6f * s, Ink.fill(Color.rgb(240, 190, 210))) }
+                    }
+                }
+            }
+        }
+        val rs = Rng(17)
+        repeat(90) {
+            val x = rs.float() * W; val y = H * (0.31f + rs.float() * 0.69f); val s = depthScale(y) * k
+            val rr = rs.range(1.2f, 2.6f) * s
+            c.drawOval(x - rr * 1.3f, y - rr, x + rr * 1.3f, y + rr * 0.4f, Ink.fill(Color.rgb(176, 170, 156)))
+            c.drawOval(x - rr * 0.9f, y - rr * 0.9f, x + rr * 0.3f, y - rr * 0.3f, Ink.fill(Color.argb(140, 236, 232, 222)))
+            c.drawOval(x - rr * 1.3f, y - rr, x + rr * 1.3f, y + rr * 0.4f, Ink.stroke(HorseArt.alpha(Ink.INK, 0.6f), 0.5f * s))
         }
         // paddocks (intérieur et clôture du fond)
         for (pd in paddocks(g.level(BuildingType.PRE))) paddockGround(c, pd, grass)
@@ -212,6 +245,9 @@ class FarmMapArt {
         path.reset(); path.moveTo(x - s * 1.2f, y - s); path.lineTo(x, y - s * 1.9f); path.lineTo(x + s * 1.2f, y - s); path.close()
         c.drawPath(path, Ink.fill(roof))
         c.drawRect(x - s, y - s, x + s, y, Ink.stroke(Ink.INK_SOFT, 0.5f * k)); c.drawPath(path, Ink.stroke(Ink.INK_SOFT, 0.5f * k))
+        c.drawRect(x - s * 0.6f, y - s * 0.7f, x - s * 0.25f, y - s * 0.35f, Ink.fill(Color.rgb(110, 130, 150)))
+        c.drawRect(x + s * 0.2f, y - s * 0.6f, x + s * 0.5f, y, Ink.fill(Color.rgb(120, 90, 70)))
+        c.drawRect(x + s * 0.45f, y - s * 1.75f, x + s * 0.7f, y - s * 1.3f, Ink.fill(Color.rgb(150, 120, 110)))
     }
 
     private fun dirtPath(c: Canvas, pts: FloatArray, width: Float) {
@@ -224,6 +260,36 @@ class FarmMapArt {
         c.drawPath(path, Ink.stroke(Color.rgb(196, 168, 122), width * k))
         val pe = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeWidth = width * k * 0.3f; color = Color.argb(60, 255, 245, 220); pathEffect = android.graphics.DashPathEffect(floatArrayOf(6f * k, 9f * k), 0f) }
         c.drawPath(path, pe)
+        // ornières, herbe au milieu et cailloux
+        val rut = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeWidth = width * k * 0.12f; color = Color.argb(70, 110, 80, 50) }
+        val pm = android.graphics.PathMeasure(path, false)
+        val len = pm.length
+        val pos = FloatArray(2); val tan = FloatArray(2)
+        val r = Rng((pts[0] * 1000 + pts[1] * 100).toLong())
+        var d = 0f
+        val left = Path(); val right = Path(); var first = true
+        while (d <= len) {
+            pm.getPosTan(d, pos, tan)
+            val nx = -tan[1]; val ny = tan[0]
+            val o = width * k * 0.25f
+            if (first) { left.moveTo(pos[0] + nx * o, pos[1] + ny * o); right.moveTo(pos[0] - nx * o, pos[1] - ny * o); first = false }
+            else { left.lineTo(pos[0] + nx * o, pos[1] + ny * o); right.lineTo(pos[0] - nx * o, pos[1] - ny * o) }
+            // cailloux épars
+            if (r.chance(0.35f)) {
+                val off = r.range(-0.45f, 0.45f) * width * k
+                val px0 = pos[0] + nx * off; val py0 = pos[1] + ny * off
+                val rr = r.range(0.6f, 1.4f) * k
+                c.drawOval(px0 - rr * 1.3f, py0 - rr, px0 + rr * 1.3f, py0 + rr * 0.6f, Ink.fill(if (r.chance(0.5f)) Color.rgb(160, 140, 112) else Color.rgb(222, 204, 170)))
+            }
+            // touffes d'herbe sur les bords
+            if (r.chance(0.3f)) {
+                val side = if (r.chance(0.5f)) 1f else -1f
+                val ex = pos[0] + nx * side * width * k * 0.55f; val ey = pos[1] + ny * side * width * k * 0.55f
+                Ink.line(c, ex, ey, ex - 1.2f * k, ey - 3.5f * k, 0.7f * k, Color.argb(160, 70, 110, 50)); Ink.line(c, ex + 1f * k, ey, ex + 2.2f * k, ey - 3f * k, 0.7f * k, Color.argb(160, 70, 110, 50))
+            }
+            d += 5f * k
+        }
+        if (width >= 7f) { c.drawPath(left, rut); c.drawPath(right, rut) }
     }
 
     fun tree(c: Canvas, x: Float, y: Float, s: Float, i: Int, amb: Ambience) {
@@ -236,21 +302,47 @@ class FarmMapArt {
             repeat(6) { val a = -PI.toFloat() / 2 + r.range(-1f, 1f); Ink.line(c, x, y - s * 0.6f, x + cos(a) * s * 0.5f, y - s * 0.6f + sin(a) * s * 0.5f, 1f * k) }
             return
         }
+        // écorce, racines et branches maîtresses
+        Ink.line(c, x - s * 0.02f, y - s * 0.1f, x - s * 0.01f, y - s * 0.55f, 0.6f * k, HorseArt.alpha(Ink.INK, 0.45f))
+        Ink.line(c, x + s * 0.03f, y - s * 0.2f, x + s * 0.035f, y - s * 0.45f, 0.5f * k, HorseArt.alpha(Ink.INK, 0.35f))
+        Ink.line(c, x - s * 0.07f, y, x - s * 0.14f, y + s * 0.03f, 1f * k, Color.rgb(110, 84, 60)); Ink.line(c, x + s * 0.08f, y, x + s * 0.15f, y + s * 0.025f, 1f * k, Color.rgb(110, 84, 60))
+        Ink.line(c, x, y - s * 0.6f, x - s * 0.2f, y - s * 0.85f, 1.6f * k, Color.rgb(110, 84, 60)); Ink.line(c, x + s * 0.02f, y - s * 0.62f, x + s * 0.22f, y - s * 0.9f, 1.4f * k, Color.rgb(110, 84, 60))
         val col = Scenery.foliage(amb, i)
         val r = Rng(i * 77L)
-        for (b in 0 until 3) {
-            val bx = x + r.range(-0.3f, 0.3f) * s; val by = y - s * r.range(0.85f, 1.15f)
-            val pp = Ink.blobPath(bx, by, s * r.range(0.38f, 0.5f), s * r.range(0.32f, 0.42f), r.nextLong(), 9, 0.25f)
-            Ink.wash(c, pp, HorseArt.shade(col, r.range(0.9f, 1.08f)), 1f * k, 0.3f, 130)
+        // masse sombre du dessous puis touffes de feuillage, de l'arrière vers l'avant
+        Ink.wash(c, Ink.blobPath(x, y - s * 0.92f, s * 0.58f, s * 0.36f, i * 5L, 10, 0.2f), HorseArt.shade(col, 0.72f), 1f * k, 0.3f, 120)
+        val nb = 7
+        for (b in 0 until nb) {
+            val ang = b / nb.toFloat() * 6.28f + r.range(-0.3f, 0.3f)
+            val bx = x + cos(ang) * s * 0.3f; val by = y - s * 1.0f + sin(ang) * s * 0.2f - (if (b % 2 == 0) s * 0.08f else 0f)
+            val up = (y - s - by) / (s * 0.3f) // touffes du haut plus claires
+            val pp = Ink.blobPath(bx, by, s * r.range(0.24f, 0.32f), s * r.range(0.2f, 0.26f), r.nextLong(), 8, 0.28f)
+            Ink.wash(c, pp, HorseArt.shade(col, 0.9f + up.coerceIn(-1f, 1f) * 0.08f + r.range(-0.03f, 0.05f)), 0.8f * k, 0.3f, 130)
         }
-        // touches de lumière et ombres
-        c.drawPath(Ink.blobPath(x - s * 0.15f, y - s * 1.15f, s * 0.18f, s * 0.12f, i * 3L, 6, 0.3f), Ink.fill(HorseArt.alpha(Color.rgb(230, 240, 180), 0.35f)))
-        repeat(5) { val a = r.range(0f, 6.28f); val d = r.range(0.1f, 0.35f) * s; Ink.line(c, x + cos(a) * d, y - s + sin(a) * d * 0.7f, x + cos(a) * d + 3f * k, y - s + sin(a) * d * 0.7f + 2f * k, 0.8f * k, HorseArt.alpha(Ink.INK, 0.5f)) }
+        Ink.wash(c, Ink.blobPath(x - s * 0.05f, y - s * 1.12f, s * 0.3f, s * 0.24f, i * 7L, 8, 0.25f), HorseArt.lighten(col, 0.06f), 0.8f * k, 0.3f, 130)
+        // touches de lumière en haut à gauche, feuilles dessinées, ombre interne en bas
+        c.drawPath(Ink.blobPath(x - s * 0.15f, y - s * 1.2f, s * 0.18f, s * 0.11f, i * 3L, 6, 0.3f), Ink.fill(HorseArt.alpha(Color.rgb(230, 240, 180), 0.4f)))
+        c.drawPath(Ink.blobPath(x + s * 0.1f, y - s * 0.78f, s * 0.35f, s * 0.08f, i * 9L, 6, 0.3f), Ink.fill(HorseArt.alpha(Color.rgb(20, 40, 20), 0.18f)))
+        repeat(16) {
+            val a = r.range(0f, 6.28f); val d = r.range(0.05f, 0.45f) * s
+            val lx = x + cos(a) * d; val ly = y - s + sin(a) * d * 0.65f
+            val light = ly < y - s
+            path.reset(); path.moveTo(lx, ly); path.quadTo(lx + 2f * k, ly - 2f * k, lx + 3.5f * k, ly + 0.5f * k)
+            c.drawPath(path, Ink.stroke(if (light) HorseArt.alpha(Color.rgb(240, 250, 200), 0.5f) else HorseArt.alpha(Ink.INK, 0.45f), 0.7f * k))
+        }
+        // pommes à la fin de l'été et en automne
+        if (i % 4 == 1 && (amb.season == Season.AUTOMNE || amb.season == Season.ETE)) repeat(6) {
+            c.drawCircle(x + r.range(-0.4f, 0.4f) * s, y - s * r.range(0.8f, 1.15f), 1.5f * k, Ink.fill(Color.rgb(200, 50, 40)))
+        }
     }
 
     private fun bush(c: Canvas, x: Float, y: Float, s: Float, i: Int, amb: Ambience) {
         val col = HorseArt.shade(Scenery.foliage(amb, i + 1), 0.9f)
+        c.drawOval(x - s * 1.1f, y - s * 0.15f, x + s * 1.1f, y + s * 0.2f, Ink.fill(Color.argb(50, 30, 50, 20)))
         Ink.wash(c, Ink.blobPath(x, y - s * 0.4f, s, s * 0.6f, i * 13L, 7, 0.3f), col, 0.8f * k, 0.3f, 110)
+        c.drawPath(Ink.blobPath(x - s * 0.2f, y - s * 0.65f, s * 0.5f, s * 0.25f, i * 17L, 6, 0.3f), Ink.fill(HorseArt.alpha(Color.rgb(230, 240, 180), 0.3f)))
+        val rl = Rng(i * 31L)
+        repeat(5) { val lx = x + rl.range(-0.7f, 0.7f) * s; val ly = y - s * rl.range(0.15f, 0.7f); path.reset(); path.moveTo(lx, ly); path.quadTo(lx + 1.5f * k, ly - 1.5f * k, lx + 3f * k, ly); c.drawPath(path, Ink.stroke(HorseArt.alpha(Ink.INK, 0.4f), 0.6f * k)) }
         if (amb.season == Season.PRINTEMPS || amb.season == Season.ETE) {
             val r = Rng(i.toLong())
             repeat(4) { c.drawCircle(x + r.range(-0.7f, 0.7f) * s, y - s * r.range(0.2f, 0.7f), 1.4f * k, Ink.fill(if (i % 2 == 0) Color.rgb(250, 240, 120) else Color.rgb(240, 160, 180))) }
@@ -262,6 +354,16 @@ class FarmMapArt {
         Ink.wash(c, pp, Color.rgb(110, 160, 170), 1f * k, 0.3f, 80)
         repeat(6) { i -> val rx = x - 30f * k + i * 4f * k; Ink.line(c, rx, y - 6f * k, rx + 1f * k, y - 18f * k, 1f * k, Color.rgb(80, 110, 60)) }
         c.drawOval(x - 10f * k, y - 3f * k, x + 4f * k, y + 1f * k, Ink.fill(Color.argb(90, 255, 255, 255)))
+        // rides, nénuphars, massettes
+        for (q in 0..2) c.drawArc(x + (q * 9f - 4f) * k, y + (q % 2) * 3f * k - 2f * k, x + (q * 9f + 6f) * k, y + (q % 2) * 3f * k + 1f * k, 0f, 180f, false, Ink.stroke(Color.argb(110, 255, 255, 255), 0.6f * k))
+        for ((lx, ly) in listOf(x + 14f * k to y + 3f * k, x + 20f * k to y - 2f * k, x - 18f * k to y + 4f * k)) {
+            c.drawArc(lx - 4f * k, ly - 2f * k, lx + 4f * k, ly + 2f * k, 20f, 320f, true, Ink.fill(Color.rgb(96, 150, 76)))
+            c.drawArc(lx - 4f * k, ly - 2f * k, lx + 4f * k, ly + 2f * k, 20f, 320f, true, Ink.stroke(HorseArt.alpha(Ink.INK, 0.6f), 0.5f * k))
+        }
+        c.drawCircle(x + 20f * k, y - 3f * k, 1.4f * k, Ink.fill(Color.rgb(250, 210, 226)))
+        for (q in 0..2) { val rx = x - 31f * k + q * 5f * k; c.drawRoundRect(rx - 1f * k, y - 22f * k + q * 2f * k, rx + 1f * k, y - 16f * k + q * 2f * k, 1f * k, 1f * k, Ink.fill(Color.rgb(110, 70, 40))) }
+        // berge
+        c.drawPath(pp, Ink.stroke(HorseArt.alpha(Color.rgb(140, 110, 70), 0.5f), 2.2f * k))
     }
 
     private fun garden(c: Canvas, x: Float, y: Float) {
@@ -307,6 +409,10 @@ class FarmMapArt {
             for ((x, y, s) in listOf(Triple(x1, y1, s1), Triple((x1 + x2) / 2, (y1 + y2) / 2, (s1 + s2) / 2))) {
                 c.drawRect(x - 1.6f * s, y - post * s, x + 1.6f * s, y + 1f * s, Ink.fill(Color.rgb(128, 92, 60)))
                 c.drawRect(x - 1.6f * s, y - post * s, x + 1.6f * s, y + 1f * s, Ink.stroke(Ink.INK, 0.8f * s))
+                c.drawRect(x - 1.6f * s, y - post * s, x - 0.4f * s, y + 1f * s, Ink.fill(Color.argb(60, 255, 230, 190)))
+                c.drawRect(x - 2.1f * s, y - post * s - 1.2f * s, x + 2.1f * s, y - post * s + 0.2f * s, Ink.fill(Color.rgb(96, 70, 46)))
+                // herbe au pied du piquet
+                Ink.line(c, x - 2.5f * s, y + 1f * s, x - 3.5f * s, y - 2.5f * s, 0.6f * s, Color.argb(170, 70, 110, 50)); Ink.line(c, x + 2.5f * s, y + 1f * s, x + 3.2f * s, y - 2.2f * s, 0.6f * s, Color.argb(170, 70, 110, 50))
             }
         }
     }
@@ -322,24 +428,67 @@ class FarmMapArt {
         // pignon (côté droit)
         path.reset(); path.moveTo(R, y); path.lineTo(R + dx, y - dy); path.lineTo(R + dx, T - dy); path.lineTo(R + dx / 2, T - dy / 2 - rh); path.lineTo(R, T); path.close()
         Ink.wash(c, path, HorseArt.shade(wall, 0.8f), iw, 0.2f, 90)
+        // bardage horizontal du pignon et lucarne
+        run {
+            var yy = y - 4f * k
+            while (yy > T - dy + 2f * k) {
+                val f0 = 0f; val f1 = 1f
+                Ink.line(c, R + dx * f0 + 0.5f * k, yy, R + dx * f1 - 0.5f * k, yy - dy, 0.5f * k, HorseArt.alpha(Ink.INK, 0.25f))
+                yy -= 4.5f * k
+            }
+            val gx = R + dx * 0.5f; val gy = T - dy * 0.5f - rh * 0.35f
+            if (rh > 8f * k) {
+                c.drawRect(gx - 3f * k, gy - 3f * k, gx + 3f * k, gy + 3f * k, Ink.fill(Color.rgb(60, 50, 44)))
+                c.drawRect(gx - 3f * k, gy - 3f * k, gx + 3f * k, gy + 3f * k, Ink.stroke(Color.rgb(236, 226, 206), 0.9f * k))
+            }
+        }
         // façade
         path.reset(); path.addRect(L, T, R, y, Path.Direction.CW)
         Ink.wash(c, path, wall, iw, 0.2f, 110)
         // planches verticales
         var px0 = L + 5f * k
-        while (px0 < R - 2f) { Ink.line(c, px0, T + 2f, px0, y - 1f, 0.5f * k, HorseArt.alpha(Ink.INK, 0.3f)); px0 += 5.5f * k }
+        val rg = Rng((x * 13).toLong())
+        while (px0 < R - 2f) {
+            Ink.line(c, px0, T + 2f, px0, y - 1f, 0.5f * k, HorseArt.alpha(Ink.INK, 0.3f))
+            // nœuds et veinures du bois
+            if (rg.chance(0.35f)) { val ky = T + (y - T) * rg.range(0.15f, 0.85f); c.drawOval(px0 + 1.5f * k, ky - 1f * k, px0 + 3f * k, ky + 1f * k, Ink.stroke(HorseArt.alpha(Ink.INK, 0.25f), 0.4f * k)) }
+            px0 += 5.5f * k
+        }
+        // soubassement en pierre et ombre sous l'avant-toit
+        run {
+            val sb = min(6f * k, (y - T) * 0.15f)
+            c.drawRect(L, y - sb, R, y, Ink.fill(Color.rgb(170, 160, 146)))
+            var sx = L; var row = 0
+            while (sx < R) { val sw = rg.range(4f, 7f) * k; c.drawRect(sx, y - sb, min(R, sx + sw), y, Ink.stroke(HorseArt.alpha(Ink.INK, 0.4f), 0.5f * k)); sx += sw; row++ }
+            p.shader = LinearGradient(0f, T, 0f, T + 6f * k, Color.argb(90, 20, 14, 10), Color.argb(0, 20, 14, 10), Shader.TileMode.CLAMP)
+            c.drawRect(L, T, R, T + 6f * k, p); p.shader = null
+        }
         // toit
         val oh = 4f * k
         path.reset()
         path.moveTo(L - oh, T + oh * 0.4f); path.lineTo(R + oh * 0.5f, T + oh * 0.4f)
         path.lineTo(R + dx / 2 + oh * 0.5f, T - dy / 2 - rh); path.lineTo(L + dx / 2 - oh, T - dy / 2 - rh); path.close()
         Ink.wash(c, path, roof, iw, 0.25f, 130)
-        // tuiles / tôles
-        val rows = 5
-        for (r in 1 until rows) {
-            val f = r / rows.toFloat()
-            Ink.line(c, L - oh + (dx / 2) * f, T + oh * 0.4f - (dy / 2 + rh + oh * 0.4f) * f, R + oh * 0.5f + (dx / 2) * f, T + oh * 0.4f - (dy / 2 + rh + oh * 0.4f) * f, 0.6f * k, HorseArt.alpha(Ink.INK, 0.35f))
+        // tuiles : rangées décalées, chaque tuile légèrement nuancée
+        val rows = max(4, ((rh + dy / 2) / (4.5f * k)).toInt())
+        val rt = Rng((x * 5).toLong())
+        for (r in 0 until rows) {
+            val f0 = r / rows.toFloat(); val f1 = (r + 1) / rows.toFloat()
+            val y0 = T + oh * 0.4f - (dy / 2 + rh + oh * 0.4f) * f0; val y1 = T + oh * 0.4f - (dy / 2 + rh + oh * 0.4f) * f1
+            val x0 = L - oh + (dx / 2) * f0; val x1 = R + oh * 0.5f + (dx / 2) * f0
+            if (r > 0) Ink.line(c, x0, y0, x1, y0, 0.6f * k, HorseArt.alpha(Ink.INK, 0.35f))
+            val tw = 6f * k
+            var tx = x0 + (if (r % 2 == 0) 0f else tw / 2)
+            while (tx < x1 - 1f) {
+                val sh = (x1 - x0) * 0f + (y1 - y0) * 0f
+                Ink.line(c, tx + sh, y0, tx + (dx / 2) / rows, y1, 0.45f * k, HorseArt.alpha(Ink.INK, 0.22f))
+                if (rt.chance(0.25f)) c.drawRect(tx + 0.5f * k, y1 + 0.4f * k, min(x1, tx + tw - 0.5f * k), y0 - 0.4f * k, Ink.fill(if (rt.chance(0.5f)) Color.argb(40, 255, 240, 220) else Color.argb(40, 30, 20, 10)))
+                tx += tw
+            }
         }
+        // faîtage et bord de toit éclairé
+        Ink.line(c, L + dx / 2 - oh, T - dy / 2 - rh, R + dx / 2 + oh * 0.5f, T - dy / 2 - rh, 2f * k, HorseArt.shade(roof, 0.7f))
+        Ink.line(c, L - oh, T + oh * 0.4f, R + oh * 0.5f, T + oh * 0.4f, 1.2f * k, HorseArt.lighten(roof, 0.25f))
         if (ruined) {
             // trous dans le toit, planches arrachées
             val r = Rng((x * 7).toLong())
@@ -422,11 +571,22 @@ class FarmMapArt {
             val top = f.top + f.height() * 0.25f
             val open = RectF(l, top, r, top + (f.bottom - top) * 0.45f)
             c.drawRect(open, Ink.fill(Color.rgb(46, 36, 28)))
+            // râtelier à foin au fond
+            c.drawRect(open.left + open.width() * 0.15f, open.top + open.height() * 0.2f, open.right - open.width() * 0.15f, open.top + open.height() * 0.45f, Ink.fill(Color.rgb(150, 130, 70)))
             boxDoors += RectF(open)
             val door = RectF(l, open.bottom, r, f.bottom)
             c.drawRect(door, Ink.fill(Color.rgb(84, 120, 88)))
+            // planches et cadre de la porte, croix en Z, pentures, loquet
+            var bx = door.left + 2.5f * k
+            while (bx < door.right - 1f) { Ink.line(c, bx, door.top + 1f, bx, door.bottom - 1f, 0.4f * k, HorseArt.alpha(Ink.INK, 0.3f)); bx += 3f * k }
+            c.drawRect(door.left, door.top, door.right, door.top + 1.6f * k, Ink.fill(Color.rgb(64, 96, 70)))
             Ink.line(c, door.left, door.top, door.right, door.bottom, 0.9f * k); Ink.line(c, door.right, door.top, door.left, door.bottom, 0.9f * k)
+            Ink.line(c, door.left, door.top + door.height() * 0.3f, door.left + door.width() * 0.3f, door.top + door.height() * 0.3f, 1f * k, Color.rgb(40, 40, 40))
+            c.drawCircle(door.right - 2f * k, door.top + door.height() * 0.45f, 0.9f * k, Ink.fill(Color.rgb(200, 190, 160)))
+            c.drawRect(l - 1f * k, top - 1.5f * k, r + 1f * k, top, Ink.fill(Color.rgb(236, 226, 206)))
             c.drawRect(l, top, r, f.bottom, Ink.stroke(Ink.INK, 1f * k))
+            // petite plaque de nom
+            c.drawRect(open.centerX() - 3f * k, top - 5f * k, open.centerX() + 3f * k, top - 2f * k, Ink.fill(Ink.PARCH))
         }
     }
 
@@ -435,8 +595,35 @@ class FarmMapArt {
         path.reset()
         path.moveTo(x - w / 2, y); path.lineTo(x + w / 2, y); path.lineTo(x + w / 2 + dx, y - h * 0.45f); path.lineTo(x - w / 2 + dx, y - h * 0.45f); path.close()
         Ink.wash(c, path, Color.rgb(222, 200, 156), 1f * k, 0.25f, 150)
-        // lice blanche
+        // sable : piste tracée le long de la lice, empreintes, ratissage
+        c.save(); c.clipPath(path)
+        val ra = Rng((x * 11).toLong())
+        val inset = Path()
+        val ins = 0.12f
+        inset.moveTo(x - w / 2 + w * ins * 0.5f + dx * 0.1f, y - h * 0.05f); inset.lineTo(x + w / 2 - w * ins * 0.5f + dx * 0.1f, y - h * 0.05f)
+        inset.lineTo(x + w / 2 + dx * 0.9f - w * ins * 0.5f, y - h * 0.4f); inset.lineTo(x - w / 2 + dx * 0.9f + w * ins * 0.5f, y - h * 0.4f); inset.close()
+        c.drawPath(inset, Ink.stroke(Color.argb(70, 150, 120, 80), 4f * k))
+        repeat(220) {
+            val fy = ra.float(); val fx = ra.float()
+            val px0 = x - w / 2 + dx * fy + w * fx; val py0 = y - h * 0.45f * fy
+            if (ra.chance(0.5f)) c.drawOval(px0 - 0.9f * k, py0 - 0.5f * k, px0 + 0.9f * k, py0 + 0.5f * k, Ink.fill(Color.argb(60, 140, 110, 70)))
+            else c.drawCircle(px0, py0, 0.5f * k, Ink.fill(Color.argb(90, 250, 240, 220)))
+        }
+        for (q in 1..4) Ink.line(c, x - w / 2 + dx * q / 5f, y - h * 0.45f * q / 5f, x + w / 2 + dx * q / 5f, y - h * 0.45f * q / 5f, 0.5f * k, Color.argb(40, 120, 90, 60))
+        c.restore()
+        // lice blanche sur poteaux
+        c.drawPath(path, Ink.stroke(Ink.INK, 3.2f * k))
         c.drawPath(path, Ink.stroke(Color.WHITE, 2.2f * k))
+        val corners = floatArrayOf(x - w / 2, y, x + w / 2, y, x + w / 2 + dx, y - h * 0.45f, x - w / 2 + dx, y - h * 0.45f)
+        for (e in 0..3) {
+            val ax = corners[e * 2]; val ay = corners[e * 2 + 1]; val bx2 = corners[((e + 1) % 4) * 2]; val by2 = corners[((e + 1) % 4) * 2 + 1]
+            for (q in 0..5) { val t = q / 6f; val ppx = ax + (bx2 - ax) * t; val ppy = ay + (by2 - ay) * t; Ink.line(c, ppx, ppy, ppx, ppy + 3f * k, 1.2f * k, Color.WHITE) }
+        }
+        // lettres de dressage
+        if (!ghost) for ((q, lt) in listOf(0.5f to "C", 0.2f to "H", 0.8f to "M")) {
+            val lx = x - w / 2 + dx + w * q; val ly = y - h * 0.45f - 2f * k
+            c.drawRect(lx - 2.5f * k, ly - 5f * k, lx + 2.5f * k, ly, Ink.fill(Color.WHITE)); c.drawRect(lx - 2.5f * k, ly - 5f * k, lx + 2.5f * k, ly, Ink.stroke(Ink.INK, 0.5f * k))
+        }
         // obstacles
         val cols = intArrayOf(Color.rgb(200, 50, 50), Color.rgb(50, 90, 170), Color.rgb(230, 170, 40))
         for (i in 0..2) {
@@ -454,6 +641,13 @@ class FarmMapArt {
         val pe = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeWidth = 1f * k; color = HorseArt.alpha(Ink.INK, 0.6f); pathEffect = android.graphics.DashPathEffect(floatArrayOf(4f * k, 3f * k), 0f) }
         c.drawPath(path, pe)
         for ((px0, py0) in listOf(x - w / 2 to y - h, x + w / 2 to y - h, x - w / 2 to y, x + w / 2 to y)) Ink.line(c, px0, py0, px0, py0 - 7f * k, 1.4f * k, Color.rgb(120, 90, 60))
+        // herbes folles et chardons sur le terrain en friche
+        val rw = Rng((x * 17 + y).toLong())
+        repeat(14) {
+            val wx = x + rw.range(-0.45f, 0.45f) * w; val wy = y - rw.float() * h
+            Ink.line(c, wx, wy, wx - 1.5f * k, wy - 6f * k, 0.7f * k, Color.argb(200, 90, 120, 60)); Ink.line(c, wx, wy, wx + 1.5f * k, wy - 7f * k, 0.7f * k, Color.argb(200, 90, 120, 60))
+            if (rw.chance(0.3f)) c.drawCircle(wx + 1.5f * k, wy - 7.5f * k, 1.2f * k, Ink.fill(Color.rgb(170, 110, 190)))
+        }
         signPost(c, x, y - h * 0.3f)
     }
 

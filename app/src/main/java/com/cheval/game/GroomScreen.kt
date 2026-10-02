@@ -3,6 +3,7 @@ package com.cheval.game
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.LinearGradient
+import android.graphics.Path
 import android.graphics.Paint
 import android.graphics.RadialGradient
 import android.graphics.RectF
@@ -63,7 +64,7 @@ class GroomScreen(app: GameView, private val horse: Horse) : Screen(app) {
         app.gui.onRawTouch = { e -> onTouch(e) }
     }
 
-    override fun dispose() { gui.onRawTouch = null }
+    override fun dispose() { gui.onRawTouch = null; aisle?.recycle(); aisle = null }
 
     override fun update(dt: Float) {
         t += dt
@@ -140,17 +141,7 @@ class GroomScreen(app: GameView, private val horse: Horse) : Screen(app) {
     override fun draw(c: Canvas) {
         val g = game
         val u = gui.u; val w = gui.w; val h = gui.h
-        // allée d'écurie
-        gui.p.color = -1; gui.p.shader = LinearGradient(0f, 0f, 0f, h, Color.rgb(130, 92, 62), Color.rgb(70, 48, 32), Shader.TileMode.CLAMP)
-        c.drawRect(0f, 0f, w, h, gui.p); gui.p.shader = null
-        gui.p.color = Color.argb(40, 0, 0, 0)
-        var yy = 0f; while (yy < h * 0.74f) { c.drawRect(0f, yy, w, yy + 1.5f * u, gui.p); yy += 18f * u }
-        gui.p.color = Color.rgb(150, 142, 130); c.drawRect(0f, h * 0.74f, w, h, gui.p)
-        gui.p.color = -1; gui.p.shader = RadialGradient(w * 0.45f, h * 0.1f, w * 0.6f, Color.argb(80, 255, 225, 160), Color.argb(0, 255, 225, 160), Shader.TileMode.CLAMP)
-        c.drawRect(0f, 0f, w, h, gui.p); gui.p.shader = null
-        // anneaux d'attache
-        gui.sp.color = Color.rgb(170, 170, 170); gui.sp.strokeWidth = 2f * u
-        c.drawCircle(w * 0.15f, h * 0.3f, 6f * u, gui.sp); c.drawCircle(w * 0.8f, h * 0.3f, 6f * u, gui.sp)
+        drawAisle(c, w, h, u)
 
         val a = Appearance.of(horse, g.day)
         // la propreté affichée suit le pansage en cours
@@ -199,6 +190,122 @@ class GroomScreen(app: GameView, private val horse: Horse) : Screen(app) {
         gui.button(c, RectF(w - 150f * u, h - 58f * u, w - 10f * u, h - 12f * u), "Terminer", Btn.GOLD, size = 14f) { finish() }
         if (annoyed > 0f) gui.text(c, "${horse.name} n'aime pas ça : sur la tête, seulement la brosse douce !", w * 0.42f, 64f * u, 11f, Pal.CREAM, Paint.Align.CENTER, shadow = true)
         else if (happy > 0.6f) gui.text(c, "${horse.name} ferme à moitié les yeux de plaisir…", w * 0.42f, 64f * u, 11f, Pal.CREAM, Paint.Align.CENTER, shadow = true)
+    }
+
+    /** Allée d'écurie : bardage en planches, boxes, fenêtre, sellerie, foin, sol pavé et paille. */
+    private var aisle: android.graphics.Bitmap? = null
+    private fun drawAisle(c: Canvas, w: Float, h: Float, u: Float) {
+        val cached = aisle
+        if (cached != null && cached.width == w.toInt() && cached.height == h.toInt()) { c.drawBitmap(cached, 0f, 0f, null); return }
+        cached?.recycle()
+        val bmp = android.graphics.Bitmap.createBitmap(w.toInt().coerceAtLeast(1), h.toInt().coerceAtLeast(1), android.graphics.Bitmap.Config.ARGB_8888)
+        val cc = Canvas(bmp)
+        paintAisle(cc, w, h, u)
+        aisle = bmp
+        c.drawBitmap(bmp, 0f, 0f, null)
+    }
+
+    private fun paintAisle(c: Canvas, w: Float, h: Float, u: Float) {
+        val p = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
+        val r = com.cheval.core.Rng(77)
+        val floorY = h * 0.74f
+        // mur en planches horizontales, chacune avec sa nuance et ses veinures
+        val plankH = 18f * u
+        var yy = 0f; var row = 0
+        while (yy < floorY) {
+            val k = 0.88f + r.float() * 0.2f
+            p.color = HorseArt.shade(Color.rgb(132, 94, 62), k); c.drawRect(0f, yy, w, yy + plankH, p)
+            p.color = Color.argb(28, 255, 230, 190); c.drawRect(0f, yy, w, yy + 2f * u, p)
+            p.color = Color.argb(70, 0, 0, 0); c.drawRect(0f, yy + plankH - 1.5f * u, w, yy + plankH, p)
+            // joints décalés et veinures
+            var jx = (row % 3) * 70f * u
+            while (jx < w) { Ink.line(c, jx, yy + 1f, jx, yy + plankH - 1f, 1f * u, Color.argb(80, 40, 26, 16)); jx += 230f * u }
+            repeat(6) {
+                val gx = r.float() * w; val gy = yy + plankH * (0.3f + r.float() * 0.4f); val gl = r.range(30f, 90f) * u
+                Ink.line(c, gx, gy, gx + gl, gy + r.range(-1.5f, 1.5f) * u, 0.7f * u, Color.argb(40, 40, 26, 16))
+            }
+            if (r.chance(0.4f)) { val nx = r.float() * w; c.drawOval(nx, yy + plankH * 0.35f, nx + 7f * u, yy + plankH * 0.65f, Ink.stroke(Color.argb(70, 40, 26, 16), 0.8f * u)) }
+            yy += plankH; row++
+        }
+        // poutres verticales
+        for (bx in listOf(0.06f, 0.3f, 0.62f, 0.93f)) {
+            val x = w * bx
+            p.color = Color.rgb(98, 66, 42); c.drawRect(x - 9f * u, 0f, x + 9f * u, floorY, p)
+            p.color = Color.argb(40, 255, 230, 190); c.drawRect(x - 9f * u, 0f, x - 5f * u, floorY, p)
+            c.drawRect(x - 9f * u, 0f, x + 9f * u, floorY, Ink.stroke(Ink.INK, 1.2f * u))
+        }
+        // fenêtre avec lumière du jour
+        val win = RectF(w * 0.38f, h * 0.16f, w * 0.54f, h * 0.36f)
+        p.shader = LinearGradient(0f, win.top, 0f, win.bottom, Color.rgb(196, 222, 236), Color.rgb(226, 236, 214), Shader.TileMode.CLAMP); c.drawRect(win, p); p.shader = null
+        p.color = Color.rgb(120, 160, 110); c.drawRect(win.left, win.bottom - win.height() * 0.25f, win.right, win.bottom, p)
+        c.drawRect(win, Ink.stroke(Color.rgb(236, 226, 206), 5f * u)); c.drawRect(win, Ink.stroke(Ink.INK, 1.2f * u))
+        Ink.line(c, win.centerX(), win.top, win.centerX(), win.bottom, 3f * u, Color.rgb(236, 226, 206)); Ink.line(c, win.left, win.centerY(), win.right, win.centerY(), 3f * u, Color.rgb(236, 226, 206))
+        // toile d'araignée dans le coin
+        for (q in 0..3) { val ang = q * 0.45f; Ink.line(c, win.left + 3f * u, win.top + 3f * u, win.left + 3f * u + kotlin.math.cos(ang) * 22f * u, win.top + 3f * u + kotlin.math.sin(ang) * 22f * u, 0.5f * u, Color.argb(120, 255, 255, 255)) }
+        // porte de box à gauche : bas en planches, haut à barreaux
+        val bd = RectF(w * 0.08f, h * 0.2f, w * 0.28f, floorY)
+        p.color = Color.rgb(30, 22, 16); c.drawRect(bd, p)
+        val mid = bd.top + bd.height() * 0.45f
+        p.color = Color.rgb(84, 120, 88); c.drawRect(bd.left, mid, bd.right, bd.bottom, p)
+        var px = bd.left + 6f * u; while (px < bd.right) { Ink.line(c, px, mid, px, bd.bottom, 1f * u, Color.argb(90, 20, 30, 20)); px += 12f * u }
+        Ink.line(c, bd.left, mid, bd.right, bd.bottom, 3f * u, Color.rgb(64, 96, 70)); Ink.line(c, bd.right, mid, bd.left, bd.bottom, 3f * u, Color.rgb(64, 96, 70))
+        var bx2 = bd.left + 8f * u; while (bx2 < bd.right) { Ink.line(c, bx2, bd.top, bx2, mid, 2.5f * u, Color.rgb(60, 60, 60)); bx2 += 14f * u }
+        c.drawRect(bd, Ink.stroke(Ink.INK, 1.5f * u))
+        // plaque du box
+        val pl = RectF(bd.centerX() - 28f * u, mid - 22f * u, bd.centerX() + 28f * u, mid - 6f * u)
+        Ink.parchment(c, pl, u, border = true)
+        // sellerie à droite : selle sur porte-selle, filet sur un crochet, licol
+        val sx = w * 0.78f; val sy = h * 0.32f
+        Ink.line(c, sx - 26f * u, sy + 10f * u, sx + 26f * u, sy + 10f * u, 5f * u, Color.rgb(90, 60, 40))
+        val sp = Path(); sp.moveTo(sx - 34f * u, sy + 6f * u); sp.cubicTo(sx - 30f * u, sy - 18f * u, sx - 10f * u, sy - 6f * u, sx, sy - 6f * u)
+        sp.cubicTo(sx + 14f * u, sy - 6f * u, sx + 26f * u, sy - 20f * u, sx + 34f * u, sy + 2f * u); sp.lineTo(sx + 30f * u, sy + 10f * u); sp.lineTo(sx - 30f * u, sy + 12f * u); sp.close()
+        Ink.wash(c, sp, Color.rgb(110, 62, 34), 1.5f * u)
+        Ink.line(c, sx + 6f * u, sy + 8f * u, sx + 8f * u, sy + 50f * u, 2f * u, Color.rgb(80, 46, 26))
+        c.drawRect(sx + 3f * u, sy + 48f * u, sx + 13f * u, sy + 56f * u, Ink.stroke(Color.rgb(170, 170, 170), 2f * u))
+        val hk = w * 0.86f; val hky = h * 0.18f
+        c.drawCircle(hk, hky, 3f * u, Ink.fill(Color.rgb(160, 160, 160)))
+        c.drawOval(hk - 14f * u, hky, hk + 14f * u, hky + 52f * u, Ink.stroke(Color.rgb(70, 40, 24), 2.5f * u))
+        Ink.line(c, hk - 10f * u, hky + 30f * u, hk + 10f * u, hky + 30f * u, 2f * u, Color.rgb(70, 40, 24))
+        c.drawCircle(hk, hky + 54f * u, 4f * u, Ink.stroke(Color.rgb(180, 180, 180), 1.6f * u))
+        // anneaux d'attache avec longes
+        for (rx in listOf(w * 0.15f, w * 0.8f)) {
+            c.drawCircle(rx, h * 0.5f, 6f * u, Ink.stroke(Color.rgb(170, 170, 170), 2f * u))
+            Ink.line(c, rx, h * 0.5f + 6f * u, rx + 4f * u, h * 0.5f + 30f * u, 2.5f * u, Color.rgb(196, 60, 50))
+        }
+        // sol pavé
+        p.color = Color.rgb(150, 142, 130); c.drawRect(0f, floorY, w, h, p)
+        var fy = floorY; var frow = 0
+        while (fy < h) {
+            val ph = 9f * u + (fy - floorY) * 0.12f
+            var fx = -(frow % 2) * ph
+            while (fx < w) {
+                val kk = 0.85f + r.float() * 0.25f
+                c.drawRoundRect(fx + 1f * u, fy + 1f * u, fx + ph * 2f - 1f * u, fy + ph - 1f * u, 3f * u, 3f * u, Ink.fill(HorseArt.shade(Color.rgb(160, 150, 136), kk)))
+                fx += ph * 2f
+            }
+            fy += ph; frow++
+        }
+        p.shader = LinearGradient(0f, floorY, 0f, floorY + 30f * u, Color.argb(110, 0, 0, 0), Color.argb(0, 0, 0, 0), Shader.TileMode.CLAMP); c.drawRect(0f, floorY, w, floorY + 30f * u, p); p.shader = null
+        // brins de paille éparpillés
+        repeat(160) {
+            val x = r.float() * w; val y = floorY + r.float() * (h - floorY)
+            val a = r.range(0f, 3.14f); val l = r.range(6f, 16f) * u
+            Ink.line(c, x, y, x + kotlin.math.cos(a) * l, y + kotlin.math.sin(a) * l * 0.4f, 1.2f * u, if (r.chance(0.5f)) Color.rgb(222, 196, 120) else Color.rgb(196, 166, 92))
+        }
+        // botte de foin et seau
+        val hb = RectF(w * 0.86f, floorY - 30f * u, w * 0.99f, floorY + 14f * u)
+        Ink.wash(c, Path().apply { addRoundRect(hb, 6f * u, 6f * u, Path.Direction.CW) }, Color.rgb(214, 186, 106), 1.4f * u)
+        repeat(40) { val x = hb.left + r.float() * hb.width(); val y = hb.top + r.float() * hb.height(); Ink.line(c, x, y, x + r.range(-8f, 8f) * u, y + r.range(-3f, 3f) * u, 0.8f * u, Color.argb(140, 150, 120, 60)) }
+        Ink.line(c, hb.left + hb.width() * 0.3f, hb.top, hb.left + hb.width() * 0.3f, hb.bottom, 1.5f * u, Color.rgb(170, 60, 40)); Ink.line(c, hb.left + hb.width() * 0.7f, hb.top, hb.left + hb.width() * 0.7f, hb.bottom, 1.5f * u, Color.rgb(170, 60, 40))
+        val bk = Path(); val bxc = w * 0.08f; val byc = floorY + 30f * u
+        bk.moveTo(bxc - 18f * u, byc - 26f * u); bk.lineTo(bxc + 18f * u, byc - 26f * u); bk.lineTo(bxc + 14f * u, byc + 4f * u); bk.lineTo(bxc - 14f * u, byc + 4f * u); bk.close()
+        Ink.wash(c, bk, Color.rgb(60, 110, 170), 1.4f * u)
+        c.drawOval(bxc - 18f * u, byc - 30f * u, bxc + 18f * u, byc - 22f * u, Ink.fill(Color.rgb(120, 170, 200)))
+        c.drawArc(bxc - 18f * u, byc - 46f * u, bxc + 18f * u, byc - 14f * u, 180f, 180f, false, Ink.stroke(Color.rgb(170, 170, 170), 1.5f * u))
+        // lumière de la fenêtre et grain du papier
+        p.shader = RadialGradient(w * 0.46f, h * 0.26f, w * 0.55f, Color.argb(80, 255, 225, 160), Color.argb(0, 255, 225, 160), Shader.TileMode.CLAMP)
+        c.drawRect(0f, 0f, w, h, p); p.shader = null
+        Ink.grain(c, RectF(0f, 0f, w, h), 110)
     }
 
     private fun drawTool(c: Canvas, x: Float, y: Float) {

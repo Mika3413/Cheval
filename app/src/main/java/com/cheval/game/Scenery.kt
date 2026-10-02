@@ -174,10 +174,44 @@ object Scenery {
             sp.color = Color.argb((60 + 80 * amb.light).toInt(), 255, 255, 255)
             c.drawLine(x, y, x + len, y, sp)
         }
-        // écume sur la grève
-        sp.color = Color.argb((140 * amb.light + 40).toInt(), 250, 250, 245); sp.strokeWidth = 3f
+        // crêtes de vagues : petites courbes encrées avec leur écume
+        val rc = Rng(11)
+        for (i in 0 until 26) {
+            val f = rc.float()
+            val y = top + (bottom - top) * (0.15f + f * 0.8f)
+            val sc = (0.5f + f * 1.2f) * (x1 - x0) / 800f
+            val x = x0 + (x1 - x0) * ((rc.float() + t * 0.004f * (1 + i % 2)) % 1f)
+            path.reset(); path.moveTo(x - 14f * sc, y); path.quadTo(x - 4f * sc, y - 5f * sc, x + 4f * sc, y - 2f * sc); path.quadTo(x + 8f * sc, y - 1f * sc, x + 10f * sc, y + 1f * sc)
+            c.drawPath(path, Ink.stroke(HorseArt.alpha(HorseArt.shade(base, 0.6f), 0.6f), 1.1f * sc))
+            c.drawPath(path, Ink.stroke(Color.argb((90 * amb.light + 30).toInt(), 255, 255, 255), 0.6f * sc))
+        }
+        // scintillements du soleil
+        if (amb.sky == Sky.SOLEIL && amb.light > 0.5f) {
+            val rs = Rng(21)
+            p.color = Color.argb(200, 255, 252, 230)
+            for (i in 0 until 30) {
+                val x = x0 + (x1 - x0) * rs.float(); val y = top + (bottom - top) * rs.float() * 0.6f
+                val tw = (sin(t * 3f + i * 1.7f) + 1f) * 0.5f
+                if (tw > 0.6f) c.drawCircle(x, y, (1.2f + tw) * (x1 - x0) / 800f, p)
+            }
+        }
+        // sable mouillé, puis écume festonnée qui va et vient
         val wave = sin(t * 0.8f) * 6f
+        p.color = Color.argb(70, 60, 50, 40); c.drawRect(x0, bottom - 4f, x1, bottom + 10f + wave, p)
+        path.reset()
+        val fy = bottom - 3f + wave * 0.6f
+        path.moveTo(x0, fy + 6f)
+        var fx = x0
+        while (fx < x1) { path.quadTo(fx + 9f, fy - 4f + sin(fx * 0.05f + t) * 2f, fx + 18f, fy + 1f); fx += 18f }
+        path.lineTo(x1, fy + 6f); path.close()
+        p.color = Color.argb((160 * amb.light + 50).toInt(), 250, 250, 245); c.drawPath(path, p)
+        sp.color = Color.argb((140 * amb.light + 40).toInt(), 250, 250, 245); sp.strokeWidth = 3f
         c.drawLine(x0, bottom - 2f + wave * 0.3f, x1, bottom - 2f + wave * 0.3f, sp)
+        // bulles d'écume
+        val rb = Rng(7)
+        p.color = Color.argb((150 * amb.light + 30).toInt(), 255, 255, 255)
+        val us = (x1 - x0) / 800f
+        for (i in 0 until 60) { c.drawCircle(x0 + (x1 - x0) * rb.float(), fy + (4f + rb.float() * 6f) * us, (1f + rb.float() * 1.5f) * us, p) }
     }
 
     fun tree(c: Canvas, x: Float, ground: Float, size: Float, amb: Ambience, seed: Int, poplar: Boolean = false) {
@@ -192,11 +226,25 @@ object Scenery {
         }
         val col = lit(foliage(amb, seed), amb)
         if (poplar) { Ink.wash(c, Ink.blobPath(x, ground - size * 0.85f, size * 0.17f, size * 0.55f, seed.toLong(), 8, 0.12f), col, 1.2f * k, 0.3f, 120); return }
-        for (b2 in 0 until 3) {
-            val bx = x + rr.range(-0.3f, 0.3f) * size; val by = ground - size * rr.range(0.8f, 1.05f)
-            Ink.wash(c, Ink.blobPath(bx, by, size * rr.range(0.36f, 0.48f), size * rr.range(0.3f, 0.4f), rr.nextLong(), 9, 0.25f), HorseArt.shade(col, rr.range(0.9f, 1.08f)), 1.3f * k, 0.3f, 120)
+        // branches maîtresses, masse d'ombre, puis touffes éclairées par le haut
+        Ink.line(c, x, ground - size * 0.55f, x - size * 0.22f, ground - size * 0.8f, 2.2f * k, trunk)
+        Ink.line(c, x + size * 0.01f, ground - size * 0.58f, x + size * 0.24f, ground - size * 0.86f, 2f * k, trunk)
+        Ink.line(c, x - size * 0.015f, ground - size * 0.1f, x - size * 0.01f, ground - size * 0.5f, 0.8f * k, HorseArt.alpha(Ink.INK, 0.4f))
+        Ink.wash(c, Ink.blobPath(x, ground - size * 0.88f, size * 0.55f, size * 0.34f, seed * 5L, 10, 0.2f), HorseArt.shade(col, 0.72f), 1.2f * k, 0.3f, 110)
+        for (b2 in 0 until 6) {
+            val ang = b2 / 6f * 6.28f + rr.range(-0.3f, 0.3f)
+            val bx = x + cos(ang) * size * 0.3f; val by = ground - size * 0.97f + sin(ang) * size * 0.18f
+            val up = ((ground - size * 0.97f) - by) / (size * 0.18f)
+            Ink.wash(c, Ink.blobPath(bx, by, size * rr.range(0.24f, 0.3f), size * rr.range(0.19f, 0.24f), rr.nextLong(), 8, 0.28f), HorseArt.shade(col, 0.9f + up * 0.08f + rr.range(-0.03f, 0.05f)), 1.1f * k, 0.3f, 120)
         }
-        c.drawPath(Ink.blobPath(x - size * 0.15f, ground - size * 1.05f, size * 0.16f, size * 0.1f, seed * 3L, 6, 0.3f), Ink.fill(HorseArt.alpha(Color.rgb(230, 240, 180), 0.3f)))
+        Ink.wash(c, Ink.blobPath(x - size * 0.05f, ground - size * 1.08f, size * 0.28f, size * 0.22f, seed * 7L, 8, 0.25f), HorseArt.lighten(col, 0.05f), 1.1f * k, 0.3f, 120)
+        c.drawPath(Ink.blobPath(x - size * 0.15f, ground - size * 1.15f, size * 0.16f, size * 0.1f, seed * 3L, 6, 0.3f), Ink.fill(HorseArt.alpha(Color.rgb(230, 240, 180), 0.3f)))
+        for (q in 0 until 14) {
+            val a = rr.range(0f, 6.28f); val d = rr.range(0.05f, 0.45f) * size
+            val lx = x + cos(a) * d; val ly = ground - size * 0.97f + sin(a) * d * 0.6f
+            path.reset(); path.moveTo(lx, ly); path.quadTo(lx + 2.5f * k, ly - 2.5f * k, lx + 5f * k, ly + 0.5f * k)
+            c.drawPath(path, Ink.stroke(if (ly < ground - size * 0.97f) HorseArt.alpha(Color.rgb(240, 250, 200), 0.45f) else HorseArt.alpha(Ink.INK, 0.4f), 0.9f * k))
+        }
     }
 
     fun hedge(c: Canvas, x0: Float, x1: Float, y: Float, hgt: Float, amb: Ambience) {
@@ -228,28 +276,60 @@ object Scenery {
         if (amb.snowGround) return
         sp.strokeWidth = 1.6f
         val rr = Rng(5)
-        val spacing = 26f
+        val spacing = 13f
         val start = floor((x0 + scroll) / spacing) * spacing
         var x = start
+        val flowers = amb.season == Season.PRINTEMPS || amb.season == Season.ETE
         while (x < x1 + scroll) {
             val seed = (x / spacing).toInt()
             val r2 = Rng(seed.toLong() * 31)
             val y = top + (bottom - top) * r2.float()
-            val sx = x - scroll + r2.range(-8f, 8f)
-            sp.color = HorseArt.shade(g, r2.range(0.7f, 1.2f))
-            val hh = 4f + 8f * ((y - top) / (bottom - top))
-            c.drawLine(sx, y, sx - 2f, y - hh, sp); c.drawLine(sx, y, sx + 2f, y - hh * 0.9f, sp)
-            if (amb.season == Season.PRINTEMPS && r2.chance(0.12f)) { p.color = if (r2.chance(0.5f)) Color.rgb(250, 240, 120) else Color.WHITE; c.drawCircle(sx, y - hh, 1.8f, p) }
+            val sx = x - scroll + r2.range(-6f, 6f)
+            val depth = (y - top) / (bottom - top)
+            sp.color = HorseArt.shade(g, r2.range(0.6f, 1.15f))
+            sp.strokeWidth = 1.1f + depth * 1.1f
+            val hh = 4f + 12f * depth
+            c.drawLine(sx, y, sx - 2.5f, y - hh, sp); c.drawLine(sx, y, sx + 2f, y - hh * 0.9f, sp)
+            if (r2.chance(0.5f)) { c.drawLine(sx + 1f, y, sx + 0.5f, y - hh * 1.15f, sp); c.drawLine(sx - 1f, y, sx - 4.5f, y - hh * 0.6f, sp) }
+            if (flowers && r2.chance(0.07f)) {
+                val fc = when (r2.range(0, 3)) { 0 -> Color.rgb(250, 240, 120); 1 -> Color.WHITE; else -> Color.rgb(230, 150, 180) }
+                p.color = lit(fc, amb); val fr = 1.5f + depth * 2f
+                c.drawCircle(sx, y - hh, fr, p); p.color = lit(Color.rgb(240, 190, 60), amb); c.drawCircle(sx, y - hh, fr * 0.4f, p)
+            } else if (r2.chance(0.04f)) {
+                val pr = 1.5f + depth * 3f
+                p.color = lit(Color.rgb(170, 164, 150), amb); c.drawOval(sx - pr * 1.4f, y - pr, sx + pr * 1.4f, y + pr * 0.4f, p)
+                p.color = Color.argb(110, 255, 255, 255); c.drawOval(sx - pr, y - pr * 0.9f, sx, y - pr * 0.4f, p)
+            }
             x += spacing
         }
         if (rr.float() < 0f) return
     }
 
-    fun sand(c: Canvas, x0: Float, x1: Float, top: Float, bottom: Float, amb: Ambience, wet: Boolean = false) {
+    fun sand(c: Canvas, x0: Float, x1: Float, top: Float, bottom: Float, amb: Ambience, wet: Boolean = false, scroll: Float = 0f) {
+        val span = x1 - x0
+        fun sx(f: Float, depth: Float): Float = x0 + (((span * f - scroll * (0.6f + depth * 0.6f)) % span) + span) % span
         val s = lit(if (wet) Color.rgb(176, 160, 128) else Color.rgb(222, 204, 160), amb)
         p.color = -1; p.shader = LinearGradient(0f, top, 0f, bottom, HorseArt.lighten(s, 0.08f), HorseArt.shade(s, 0.85f), Shader.TileMode.CLAMP)
         c.drawRect(x0, top, x1, bottom, p)
         p.shader = null
+        // rides du sable, grain, coquillages
+        val us = span / 800f
+        val rr = Rng(19)
+        for (i in 0 until 30) {
+            val y = top + (bottom - top) * rr.float(); val d = (y - top) / (bottom - top); val x = sx(rr.float(), d); val l = (20f + 40f * d) * us
+            path.reset(); path.moveTo(x, y); path.quadTo(x + l * 0.5f, y - 3f * us, x + l, y)
+            c.drawPath(path, Ink.stroke(HorseArt.alpha(HorseArt.shade(s, 0.72f), 0.55f), (0.8f + d) * us))
+            path.offset(0f, 1.6f * us)
+            c.drawPath(path, Ink.stroke(HorseArt.alpha(Color.WHITE, 0.3f), 0.8f * us))
+        }
+        p.color = HorseArt.alpha(HorseArt.shade(s, 0.65f), 0.5f)
+        for (i in 0 until 200) { val fx = rr.float(); val fy = rr.float(); c.drawCircle(sx(fx, fy), top + (bottom - top) * fy, (0.5f + rr.float() * 0.8f) * us, p) }
+        for (i in 0 until 6) {
+            val fx = rr.float(); val y = top + (bottom - top) * (0.3f + rr.float() * 0.7f); val x = sx(fx, (y - top) / (bottom - top))
+            val r0 = 3.5f * us
+            p.color = lit(Color.rgb(246, 236, 222), amb); c.drawArc(x - r0, y - r0, x + r0, y + r0 * 0.7f, 180f, 180f, true, p)
+            c.drawArc(x - r0, y - r0, x + r0, y + r0 * 0.7f, 180f, 180f, true, Ink.stroke(HorseArt.alpha(Ink.INK, 0.5f), 0.6f * us))
+        }
     }
 
     // ------------------------------------------------------------------ météo

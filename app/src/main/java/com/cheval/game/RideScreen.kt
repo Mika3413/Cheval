@@ -801,7 +801,7 @@ class RideScreen(app: GameView, private val horse: Horse, private val mode: Ride
         Scenery.hills(c, w, ground - 70f * u, 60f * u, camX * 0.05f, 31, Scenery.lit(Color.rgb(120, 140, 150), amb))
         if (biome == 2) {
             Scenery.sea(c, 0f, w, ground - 90f * u, ground - 10f * u, amb, t)
-            Scenery.sand(c, 0f, w, ground - 10f * u, h, amb)
+            Scenery.sand(c, 0f, w, ground - 10f * u, h, amb, scroll = camX)
             gui.p.color = HorseArt.alpha(Color.rgb(150, 130, 100), 0.4f); c.drawRect(0f, ground - 10f * u, w, ground + 10f * u, gui.p)
             // mouettes
             gui.sp.color = Scenery.lit(Color.rgb(250, 250, 250), amb); gui.sp.strokeWidth = 1.6f * u
@@ -820,6 +820,8 @@ class RideScreen(app: GameView, private val horse: Horse, private val mode: Ride
         }
     }
 
+    private val tmpPath = android.graphics.Path()
+
     private fun drawArenaBg(c: Canvas, camX: Float, ground: Float, amb: Ambience, ppm: Float) {
         val u = gui.u; val w = gui.w; val h = gui.h
         Scenery.hills(c, w, ground - 70f * u, 50f * u, camX * 0.05f, 9, Scenery.lit(Color.rgb(110, 130, 120), amb))
@@ -827,6 +829,20 @@ class RideScreen(app: GameView, private val horse: Horse, private val mode: Ride
             // tribunes, public et bannières des partenaires
             val standTop = ground - 150f * u
             gui.p.color = Scenery.lit(Color.rgb(120, 120, 126), amb); c.drawRect(0f, standTop, w, ground - 40f * u, gui.p)
+            // gradins, toiture sur poteaux et escaliers
+            gui.p.color = Scenery.lit(Color.rgb(96, 96, 104), amb)
+            var ty = standTop + 16f * u; while (ty < ground - 40f * u) { c.drawRect(0f, ty, w, ty + 2.5f * u, gui.p); ty += 18f * u }
+            gui.p.color = Scenery.lit(Color.rgb(70, 86, 80), amb); c.drawRect(0f, standTop - 26f * u, w, standTop - 12f * u, gui.p)
+            gui.p.color = Scenery.lit(Color.rgb(196, 200, 190), amb); c.drawRect(0f, standTop - 12f * u, w, standTop - 8f * u, gui.p)
+            var px = -((camX * 0.4f) % (160f * u))
+            while (px < w) {
+                gui.p.color = Scenery.lit(Color.rgb(80, 80, 88), amb); c.drawRect(px - 3f * u, standTop - 12f * u, px + 3f * u, ground - 40f * u, gui.p)
+                gui.p.color = Scenery.lit(Color.rgb(140, 140, 148), amb); c.drawRect(px + 50f * u, standTop, px + 66f * u, ground - 40f * u, gui.p)
+                px += 160f * u
+            }
+            // fanions sous la toiture
+            var fx = -((camX * 0.4f) % (40f * u)); var fi = 0
+            while (fx < w) { gui.p.color = Scenery.lit(if (fi % 3 == 0) Color.rgb(200, 50, 50) else if (fi % 3 == 1) Color.WHITE else Color.rgb(40, 70, 140), amb); tmpPath.reset(); tmpPath.moveTo(fx, standTop - 8f * u); tmpPath.lineTo(fx + 14f * u, standTop - 8f * u); tmpPath.lineTo(fx + 7f * u, standTop + 6f * u); tmpPath.close(); c.drawPath(tmpPath, gui.p); fx += 40f * u; fi++ }
             val rr = Rng(5)
             for (i in 0 until 520) {
                 val x = ((rr.float() * w * 2 - camX * 0.4f) % w + w) % w; val y = standTop + 8f * u + rr.float() * 90f * u
@@ -847,7 +863,7 @@ class RideScreen(app: GameView, private val horse: Horse, private val mode: Ride
             for (i in 0 until 8) { val tx = i * 180f * u - (camX * 0.3f) % (180f * u); Scenery.tree(c, tx, ground - 30f * u, 90f * u, amb, i) }
             Scenery.fence(c, -((camX) % (60f * u)), w + 60f * u, ground - 16f * u, 22f * u, amb, 60f * u)
         }
-        Scenery.sand(c, 0f, w, ground - 16f * u, h, amb)
+        Scenery.sand(c, 0f, w, ground - 16f * u, h, amb, scroll = camX)
         // traces dans le sable
         gui.sp.color = Color.argb(30, 0, 0, 0); gui.sp.strokeWidth = 1f * u
         var x = -((camX) % (24f * u)); while (x < w) { c.drawLine(x, ground + 8f * u, x + 10f * u, ground + 20f * u, gui.sp); x += 24f * u }

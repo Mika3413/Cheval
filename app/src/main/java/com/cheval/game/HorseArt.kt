@@ -193,8 +193,11 @@ object HorseArt {
         }
     }
 
+    private var curScale = 1f
+
     private fun drawInternal(c: Canvas, a: Appearance, pose: HorsePose, x: Float, groundY: Float, scale: Float, facingRight: Boolean,
              light: Float, tack: Tack?, shadow: Boolean) {
+        curScale = scale
         c.save()
         c.translate(x, groundY)
         c.scale(if (facingRight) scale else -scale, scale)
@@ -411,6 +414,26 @@ object HorseArt {
         detailShading(c, a, bodyCol, look, H, L, chestY, topY, light)
         coatPatterns(c, a, look, H, L, topY, chestY, lightK)
         if (a.bcs < 3.8f) ribs(c, bodyCol, H, L, topY, chestY, a.bcs)
+        if (!sil) {
+            // sillon de la jugulaire et attache encolure-épaule
+            c.save(); c.clipPath(neckPath)
+            stroke.shader = null
+            stroke.color = alpha(shade(bodyCol, 0.45f), 0.22f * light); stroke.strokeWidth = H * 0.007f
+            tmp.reset()
+            tmp.moveTo(bcx + ndx * nl * 0.72f - npx * H * 0.035f, bcy + ndy * nl * 0.72f - npy * H * 0.035f)
+            tmp.quadTo(bcx + ndx * nl * 0.4f - npx * H * 0.06f, bcy + ndy * nl * 0.4f - npy * H * 0.06f, bcx + ndx * nl * 0.05f - npx * H * 0.075f, bcy + ndy * nl * 0.05f - npy * H * 0.075f)
+            c.drawPath(tmp, stroke)
+            stroke.color = alpha(shade(bodyCol, 0.45f), 0.14f * light); stroke.strokeWidth = H * 0.009f
+            tmp.reset(); tmp.moveTo(bx(L * 0.24f, topY + H * 0.03f), by(L * 0.24f, topY + H * 0.03f))
+            tmp.quadTo(bx(L * 0.4f, topY + H * 0.12f), by(L * 0.4f, topY + H * 0.12f), bx(L * 0.47f, topY + H * 0.3f), by(L * 0.47f, topY + H * 0.3f))
+            c.drawPath(tmp, stroke)
+            // reflet le long de la crête
+            stroke.color = alpha(Color.WHITE, (0.06f + look.shine * 0.1f) * light); stroke.strokeWidth = H * 0.02f
+            tmp.reset(); tmp.moveTo(bcx + ndx * nl * 0.15f + npx * H * 0.09f, bcy + ndy * nl * 0.15f + npy * H * 0.09f)
+            tmp.quadTo(c1x - npx * H * 0.02f, c1y - npy * H * 0.02f, c2x - npx * H * 0.03f, c2y - npy * H * 0.03f)
+            c.drawPath(tmp, stroke)
+            c.restore()
+        }
 
         fill.shader = grad
         c.drawPath(headPath, fill)
@@ -472,6 +495,36 @@ object HorseArt {
         tmp.moveTo(bx(L * 0.24f, topY + H * 0.04f), by(L * 0.24f, topY + H * 0.04f))
         tmp.cubicTo(bx(L * 0.26f, topY + H * 0.18f), by(L * 0.26f, topY + H * 0.18f), bx(L * 0.3f, chestY - H * 0.1f), by(L * 0.3f, chestY - H * 0.1f), bx(L * 0.36f, chestY - H * 0.02f), by(L * 0.36f, chestY - H * 0.02f))
         c.drawPath(tmp, stroke)
+        // modelé à l'encre : épine de l'omoplate, triceps, pointe de la hanche, pli du grasset, sillon de la fesse
+        val inkC = shade(bodyCol, 0.42f)
+        fun curve(a0: Float, b0: Float, a1: Float, b1: Float, a2: Float, b2: Float, al: Float, wk: Float) {
+            stroke.color = alpha(inkC, al * 0.7f * light); stroke.strokeWidth = H * wk * 1.3f
+            tmp.reset(); tmp.moveTo(bx(a0, b0), by(a0, b0)); tmp.quadTo(bx(a1, b1), by(a1, b1), bx(a2, b2), by(a2, b2)); c.drawPath(tmp, stroke)
+        }
+        curve(L * 0.22f, topY + H * 0.07f, L * 0.27f, topY + H * 0.18f, L * 0.34f, topY + H * 0.27f, 0.22f, 0.007f)
+        curve(L * 0.36f, chestY - H * 0.17f, L * 0.27f, chestY - H * 0.15f, L * 0.23f, chestY - H * 0.03f, 0.22f, 0.008f)
+        curve(L * 0.48f, topY + H * 0.28f, L * 0.44f, topY + H * 0.33f, L * 0.45f, topY + H * 0.38f, 0.25f, 0.006f)
+        curve(-L * 0.2f, topY + H * 0.06f, -L * 0.24f, topY + H * 0.02f, -L * 0.29f, topY + H * 0.07f, 0.2f, 0.006f)
+        curve(-L * 0.19f, topY + H * 0.2f, -L * 0.25f, chestY - H * 0.12f, -L * 0.29f, chestY + H * 0.03f, 0.3f, 0.009f)
+        curve(-L * 0.43f, topY + H * 0.1f, -L * 0.47f, topY + H * 0.24f, -L * 0.44f, chestY - H * 0.02f, 0.22f, 0.007f)
+        curve(-L * 0.12f, chestY - H * 0.05f, L * 0.0f, chestY - H * 0.015f, L * 0.14f, chestY - H * 0.04f, 0.12f, 0.006f)
+        // muscle : un peu plus de relief si le cheval est musclé
+        if (a.muscle > 55f) {
+            curve(-L * 0.33f, topY + H * 0.08f, -L * 0.38f, topY + H * 0.18f, -L * 0.36f, topY + H * 0.3f, (a.muscle - 55f) / 45f * 0.18f, 0.006f)
+            curve(L * 0.3f, topY + H * 0.3f, L * 0.36f, chestY - H * 0.2f, L * 0.42f, chestY - H * 0.16f, (a.muscle - 55f) / 45f * 0.16f, 0.006f)
+        }
+        // poil : petites hachures dans le sens du poil (vers l'arrière et le bas)
+        if (H * curScale > 90f) {
+            val rp = Rng(look.seed xor 0x9A1)
+            stroke.strokeWidth = H * 0.0035f
+            repeat(140) {
+                val px = rp.range(-0.5f, 0.5f) * L; val py = rp.range(topY + H * 0.03f, chestY)
+                val dark = rp.chance(0.5f)
+                stroke.color = if (dark) alpha(Color.BLACK, 0.045f) else alpha(Color.WHITE, 0.05f + look.shine * 0.04f)
+                val ll = H * rp.range(0.012f, 0.025f)
+                c.drawLine(bx(px, py), by(px, py), bx(px - ll * 0.8f, py + ll * 0.5f), by(px - ll * 0.8f, py + ll * 0.5f), stroke)
+            }
+        }
         // boue
         if (a.dirt > 35f) {
             val r = Rng(look.seed xor 0xD1A7)
@@ -673,6 +726,24 @@ object HorseArt {
         fill.color = -1; fill.shader = LinearGradient(lg.cor.x, lg.cor.y, lg.cor.x + hd.x * hl, lg.cor.y + hd.y * hl, shade(lighten(hoof, 0.12f), lightK * k), shade(hoof, lightK * k * 0.8f), Shader.TileMode.CLAMP)
         c.drawPath(tmp, fill)
         fill.shader = null
+        if (!sil) {
+            // couronne claire, stries de pousse de la corne, bord de sole sombre
+            stroke.shader = null
+            stroke.color = alpha(lighten(shade(hoof, lightK * k), 0.25f), 0.7f); stroke.strokeWidth = hl * 0.12f
+            c.drawLine(lg.cor.x + nx * hw, lg.cor.y + ny * hw, lg.cor.x - nx * hw * 0.9f, lg.cor.y - ny * hw * 0.9f, stroke)
+            stroke.color = alpha(Color.BLACK, 0.18f); stroke.strokeWidth = hl * 0.05f
+            for (q in 1..2) {
+                val t = q / 3f
+                c.drawLine(lg.cor.x + nx * hw * (1f + 0.45f * t) + hd.x * hl * t, lg.cor.y + ny * hw * (1f + 0.45f * t) + hd.y * hl * t,
+                    lg.cor.x - nx * hw * (0.9f + 0.15f * t) + hd.x * hl * 0.8f * t, lg.cor.y - ny * hw * (0.9f + 0.15f * t) + hd.y * hl * 0.8f * t, stroke)
+            }
+            stroke.color = alpha(Color.BLACK, 0.4f); stroke.strokeWidth = hl * 0.1f
+            c.drawLine(lg.cor.x - nx * hw * 1.05f + hd.x * hl * 0.8f, lg.cor.y - ny * hw * 1.05f + hd.y * hl * 0.8f, lg.cor.x + nx * hw * 1.45f + hd.x * hl, lg.cor.y + ny * hw * 1.45f + hd.y * hl, stroke)
+            // châtaigne (face interne, au-dessus du genou ou sous le jarret) et ergot
+            fill.color = alpha(shade(0xFF3A3028.toInt(), lightK), 0.4f * k)
+            if (front) { val cx = lg.top.x * 0.25f + lg.mid.x * 0.75f; val cy = lg.top.y * 0.25f + lg.mid.y * 0.75f; c.drawOval(cx - wMid * 0.38f, cy - wMid * 0.22f, cx - wMid * 0.08f, cy + wMid * 0.22f, fill) }
+            c.drawCircle(lg.fet.x - wFet * 0.55f, lg.fet.y + wFet * 0.15f, wFet * 0.13f, fill)
+        }
         if (a.dirt > 30f) {
             fill.color = alpha(0xFF5E4A30.toInt(), (a.dirt - 30f) / 70f * 0.65f)
             seg(c, lg.fet.x, lg.fet.y - H * 0.03f, lg.cor.x, lg.cor.y, wFet * 0.95f, wPas * 1.05f)
@@ -722,13 +793,45 @@ object HorseArt {
         fill.color = -1; fill.shader = LinearGradient(x0, y0, ex, ey, shade(col, 0.82f), col, Shader.TileMode.CLAMP)
         c.drawPath(tmp, fill)
         fill.shader = null
-        stroke.shader = null
-        stroke.color = alpha(lighten(col, 0.3f), 0.28f); stroke.strokeWidth = H * 0.004f
-        for (k in 0..5) {
-            val f = k / 5f - 0.5f
-            tmp2.reset(); tmp2.moveTo(dx, dy + H * 0.02f)
-            tmp2.quadTo(dx - w1 * 0.6f + f * w1, (dy + ey) / 2f, ex + f * w1 * 1.2f, ey - H * 0.015f)
-            c.drawPath(tmp2, stroke)
+        if (sil) return
+        // mèches : chaque mèche a sa longueur, son ondulation et sa nuance
+        val r = Rng(a.look.seed xor 0x7A11)
+        val nLocks = 9
+        for (k in 0 until nLocks) {
+            val f = k / (nLocks - 1f) - 0.5f
+            val lk = 0.78f + r.float() * 0.3f
+            val lex = dx + (ex - dx) * lk + f * w1 * 1.3f + sway * 0.3f * f
+            val ley = dy + (ey - dy) * lk
+            val bend = (r.float() - 0.5f) * w1 * 0.9f - wind * len * 0.05f
+            val lw = w1 * (0.32f + r.float() * 0.18f)
+            tmp2.reset()
+            tmp2.moveTo(dx + f * w0 * 0.8f - lw * 0.3f, dy + H * 0.01f)
+            tmp2.cubicTo(dx - w1 * 0.9f + f * w1 * 0.6f + bend, dy + (ley - dy) * 0.35f, lex - w1 * 0.3f + bend * 0.6f, ley - (ley - dy) * 0.3f, lex, ley)
+            tmp2.cubicTo(lex + lw * 0.2f - bend * 0.4f, ley - (ley - dy) * 0.32f, dx - w1 * 0.5f + f * w1 * 0.6f + bend + lw, dy + (ley - dy) * 0.33f, dx + f * w0 * 0.8f + lw * 0.3f, dy + H * 0.01f)
+            tmp2.close()
+            val shadeK = if (k % 3 == 0) 0.78f else if (k % 3 == 1) 1.08f else 0.93f
+            fill.color = alpha(shade(col, shadeK), 0.55f)
+            c.drawPath(tmp2, fill)
+        }
+        // fils de crin : ombres puis reflets
+        stroke.shader = null; stroke.strokeCap = Paint.Cap.ROUND
+        for (pass in 0..1) {
+            stroke.color = if (pass == 0) alpha(shade(col, 0.55f), 0.45f) else alpha(lighten(col, 0.35f), 0.35f)
+            stroke.strokeWidth = H * (if (pass == 0) 0.0045f else 0.003f)
+            for (k in 0..10) {
+                val f = k / 10f - 0.5f + (if (pass == 1) 0.04f else 0f)
+                val lk = 0.6f + r.float() * 0.38f
+                tmp2.reset(); tmp2.moveTo(dx + f * w0, dy + H * 0.02f)
+                tmp2.quadTo(dx - w1 * 0.7f + f * w1 * 1.1f, (dy + ey) / 2f, dx + (ex - dx) * lk + f * w1 * 1.3f, dy + (ey - dy) * lk)
+                c.drawPath(tmp2, stroke)
+            }
+        }
+        // pointes effilées qui dépassent
+        stroke.color = alpha(col, 0.8f); stroke.strokeWidth = H * 0.004f
+        repeat(6) {
+            val f = r.float() - 0.5f
+            val sx = ex + f * w1 * 1.6f; val sy = ey - H * 0.01f
+            c.drawLine(sx, sy, sx - wind * H * 0.04f + f * H * 0.01f, sy + H * (0.015f + r.float() * 0.03f) * (1f - wind * 0.6f), stroke)
         }
     }
 
@@ -768,10 +871,32 @@ object HorseArt {
         c.drawPath(tmp, fill)
         fill.shader = null
         stroke.shader = null
-        stroke.color = alpha(lighten(col, 0.35f), 0.22f); stroke.strokeWidth = H * 0.003f
-        for (i in 1 until n) {
-            val l = len * 0.8f * sin(PI.toFloat() * (0.08f + i / n.toFloat() * 0.84f)).coerceAtLeast(0.3f)
-            c.drawLine(xs[i], ys[i] + H * 0.005f, xs[i] - wind * l * 0.7f + l * 0.05f, ys[i] + l * (1f - wind * 0.5f), stroke)
+        if (!sil) {
+            // mèches : creux sombres entre les mèches, puis reflets sur le dessus de chacune
+            val rr = Rng(a.look.seed xor 0x51DE)
+            for (pass in 0..2) {
+                stroke.color = when (pass) { 0 -> alpha(shade(col, 0.5f), 0.5f); 1 -> alpha(shade(col, 0.75f), 0.4f); else -> alpha(lighten(col, 0.4f), 0.32f) }
+                stroke.strokeWidth = H * (if (pass == 2) 0.0028f else 0.004f)
+                val step = if (pass == 1) 1 else 2
+                var i = 1 + pass % 2
+                while (i < n) {
+                    val t = i / n.toFloat()
+                    val l = len * (0.55f + rr.float() * 0.4f) * sin(PI.toFloat() * (0.08f + t * 0.84f)).coerceAtLeast(0.3f)
+                    val ox = if (pass == 2) H * 0.004f else 0f
+                    tmp2.reset(); tmp2.moveTo(xs[i] + ox, ys[i] + H * 0.006f)
+                    tmp2.quadTo(xs[i] + ox + l * 0.12f, ys[i] + l * 0.5f, xs[i] + ox - wind * l * 0.7f + l * 0.06f, ys[i] + l * (1f - wind * 0.5f))
+                    c.drawPath(tmp2, stroke)
+                    i += step
+                }
+            }
+            // pointes libres qui dépassent sous la crinière
+            stroke.color = alpha(col, 0.75f); stroke.strokeWidth = H * 0.0035f
+            for (i in 2 until n - 1 step 2) {
+                val t = i / n.toFloat()
+                val l = len * sin(PI.toFloat() * (0.08f + t * 0.84f)).coerceAtLeast(0.3f)
+                val tx = xs[i] - wind * l * 0.8f + l * 0.08f; val ty = ys[i] + l * (1f - wind * 0.55f)
+                c.drawLine(tx, ty - H * 0.01f, tx - wind * H * 0.02f + H * 0.004f, ty + H * 0.012f, stroke)
+            }
         }
         // toupet
         if (a.m.maneLength > 0.12f && a.foal < 0.8f) {
@@ -783,6 +908,15 @@ object HorseArt {
             tmp.close()
             fill.color = col
             c.drawPath(tmp, fill)
+            if (!sil) {
+                stroke.color = alpha(shade(col, 0.6f), 0.5f); stroke.strokeWidth = H * 0.003f
+                for (q in 0..2) {
+                    val v = 0.13f + q * 0.03f
+                    tmp2.reset(); tmp2.moveTo(hx(0.0f, v), hy(0.0f, v))
+                    tmp2.quadTo(hx(0.08f, v + 0.04f), hy(0.08f, v + 0.04f), hx(0.02f + fl / hL * (0.75f + q * 0.1f), v + 0.03f - wind * 0.1f), hy(0.02f + fl / hL * (0.75f + q * 0.1f), v + 0.03f - wind * 0.1f))
+                    c.drawPath(tmp2, stroke)
+                }
+            }
         }
     }
 
@@ -860,12 +994,41 @@ object HorseArt {
         }
         stroke.color = alpha(Color.BLACK, 0.28f); stroke.strokeWidth = er * 0.22f
         c.drawArc(-er * 1.45f, -er * 1.5f, er * 1.45f, er * 0.9f, 200f, 140f, false, stroke)
+        if (open > 0.15f) {
+            // iris brun autour de la pupille, paupière supérieure et cils
+            stroke.color = alpha(0xFF6A4026.toInt(), 0.55f); stroke.strokeWidth = er * 0.18f
+            if (!look.blueEyes) c.drawArc(-er * 0.75f, -er * 0.62f * open, er * 0.75f, er * 0.62f * open, 20f, 140f, false, stroke)
+            stroke.color = 0xFF1E1410.toInt(); stroke.strokeWidth = er * 0.2f
+            c.drawArc(-er * 1.15f, -er * 0.95f * open, er * 1.15f, er * 0.95f * open, 195f, 150f, false, stroke)
+            stroke.strokeWidth = er * 0.1f
+            for (q in 0..3) {
+                val ang = Math.toRadians(205.0 + q * 32.0)
+                val lx = cos(ang).toFloat() * er * 1.12f; val ly = sin(ang).toFloat() * er * 0.93f * open
+                c.drawLine(lx, ly, lx * 1.25f + er * 0.15f, ly * 1.35f - er * 0.12f, stroke)
+            }
+        }
+        // creux au-dessus de l'œil (salière)
+        stroke.color = alpha(Color.BLACK, 0.14f); stroke.strokeWidth = er * 0.3f
+        c.drawArc(-er * 2.2f, -er * 2.6f, er * 1.4f, -er * 0.4f, 200f, 110f, false, stroke)
         c.restore()
-        // naseau et bouche
-        stroke.color = alpha(Color.BLACK, 0.55f); stroke.strokeWidth = hL * 0.02f
-        tmp.reset(); tmp.moveTo(hx(0.87f, 0.08f), hy(0.87f, 0.08f)); tmp.quadTo(hx(0.96f, 0.065f), hy(0.96f, 0.065f), hx(0.94f, 0.01f), hy(0.94f, 0.01f)); c.drawPath(tmp, stroke)
-        stroke.strokeWidth = hL * 0.011f
-        c.drawLine(hx(0.87f, -0.05f), hy(0.87f, -0.05f), hx(1.0f, -0.045f), hy(1.0f, -0.045f), stroke)
+        // naseau : ouverture en virgule, rebord éclairé
+        tmp.reset()
+        tmp.moveTo(hx(0.86f, 0.085f), hy(0.86f, 0.085f))
+        tmp.quadTo(hx(0.95f, 0.085f), hy(0.95f, 0.085f), hx(0.955f, 0.03f), hy(0.955f, 0.03f))
+        tmp.quadTo(hx(0.95f, 0.0f), hy(0.95f, 0.0f), hx(0.925f, 0.02f), hy(0.925f, 0.02f))
+        tmp.quadTo(hx(0.92f, 0.06f), hy(0.92f, 0.06f), hx(0.86f, 0.085f), hy(0.86f, 0.085f))
+        tmp.close()
+        fill.color = alpha(0xFF1E1410.toInt(), 0.75f); c.drawPath(tmp, fill)
+        stroke.color = alpha(Color.WHITE, 0.18f * lightK); stroke.strokeWidth = hL * 0.012f
+        tmp.reset(); tmp.moveTo(hx(0.85f, 0.105f), hy(0.85f, 0.105f)); tmp.quadTo(hx(0.97f, 0.11f), hy(0.97f, 0.11f), hx(0.98f, 0.03f), hy(0.98f, 0.03f)); c.drawPath(tmp, stroke)
+        // bouche, lèvre inférieure et menton
+        stroke.color = alpha(Color.BLACK, 0.5f); stroke.strokeWidth = hL * 0.011f
+        tmp.reset(); tmp.moveTo(hx(0.86f, -0.055f), hy(0.86f, -0.055f)); tmp.quadTo(hx(0.94f, -0.04f), hy(0.94f, -0.04f), hx(1.0f, -0.045f), hy(1.0f, -0.045f)); c.drawPath(tmp, stroke)
+        stroke.color = alpha(Color.BLACK, 0.22f); stroke.strokeWidth = hL * 0.01f
+        tmp.reset(); tmp.moveTo(hx(0.8f, -0.095f), hy(0.8f, -0.095f)); tmp.quadTo(hx(0.84f, -0.07f), hy(0.84f, -0.07f), hx(0.9f, -0.085f), hy(0.9f, -0.085f)); c.drawPath(tmp, stroke)
+        // os de la ganache et veines du chanfrein
+        stroke.color = alpha(Color.BLACK, 0.12f); stroke.strokeWidth = hL * 0.012f
+        tmp.reset(); tmp.moveTo(hx(0.48f, -0.04f), hy(0.48f, -0.04f)); tmp.quadTo(hx(0.62f, 0.0f), hy(0.62f, 0.0f), hx(0.78f, -0.02f), hy(0.78f, -0.02f)); c.drawPath(tmp, stroke)
     }
 
     // ---------------------------------------------------------------- équipement
