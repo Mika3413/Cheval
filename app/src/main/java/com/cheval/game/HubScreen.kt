@@ -225,6 +225,47 @@ class HubScreen(app: GameView) : Screen(app) {
         modal?.let { it(c) }
     }
 
+    // ===================================================================== repères pour l'apprentissage
+    val modalOpen get() = modal != null || report != null
+
+    /** Rectangle écran d'une parcelle (bâtiment) de la carte. */
+    fun plotRect(b: BuildingType): RectF? {
+        val pl = art.plots.firstOrNull { it.type == b } ?: return null
+        val x = art.px(pl.fx) - camX; val y = art.py(pl.fy)
+        return RectF(x - pl.w * art.mapW * 0.55f, y - pl.h * art.mapH * 0.9f, x + pl.w * art.mapW * 0.65f, y + 6f * gui.u)
+    }
+
+    fun junkRect(): RectF? {
+        val j = game.junk.firstOrNull() ?: return null
+        val x = art.px(j.x) - camX; val y = art.py(j.y); val s = 26f * art.k * art.depthScale(art.py(j.y))
+        return RectF(x - s, y - s, x + s, y + 6f * gui.u)
+    }
+
+    fun boardRect(): RectF { val bx = art.px(0.1f) - camX; val by = art.py(0.56f); val u = gui.u; return RectF(bx - 18f * u, by - 36f * u, bx + 18f * u, by + 2f * u) }
+
+    /** Fait défiler la carte jusqu'à un point (fraction de la largeur de la carte). */
+    fun focus(fx: Float) { panTarget = (art.px(fx) - gui.w * 0.5f).coerceIn(0f, max(0f, art.mapW - gui.w)) }
+    fun focusPlot(b: BuildingType) { art.plots.firstOrNull { it.type == b }?.let { focus(it.fx) } }
+    fun focusJunk() { game.junk.firstOrNull()?.let { focus(it.x) } }
+
+    /** Bouton « Tournée des soins » de la fenêtre de l'écurie. */
+    fun careRoundRect(): RectF {
+        val u = gui.u
+        val r = RectF(gui.w / 2 - 230f * u, gui.h / 2 - 120f * u, gui.w / 2 + 230f * u, gui.h / 2 + 120f * u)
+        val bw = (r.width() - 48f * u) / 3f; val y = r.bottom - 54f * u
+        return RectF(r.left + 24f * u + bw, y, r.left + 24f * u + bw * 2, y + 38f * u)
+    }
+
+    fun hudObjectifs() = RectF(gui.w - 330f * gui.u, 8f * gui.u, gui.w - 234f * gui.u, 36f * gui.u)
+    fun hudNewDay() = RectF(gui.w - 228f * gui.u, 8f * gui.u, gui.w - 108f * gui.u, 36f * gui.u)
+    fun hudClock() = RectF(gui.w - 230f * gui.u, 40f * gui.u, gui.w - 58f * gui.u, 60f * gui.u)
+    fun hudShelf(i: Int): RectF {
+        val u = gui.u
+        val shelf = RectF(10f * u, gui.h - 46f * u, gui.w - 10f * u, gui.h - 6f * u)
+        val bw = (shelf.width() - 12f * u) / 6
+        return RectF(shelf.left + 6f * u + i * bw, shelf.top + 5f * u, shelf.left + (i + 1) * bw, shelf.bottom - 5f * u)
+    }
+
     private fun registerMapHits() {
         val g = game
         val u = gui.u

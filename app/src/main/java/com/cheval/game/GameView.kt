@@ -67,6 +67,7 @@ class GameView(context: Context) : View(context) {
     }
 
     fun replaceAll(s: Screen) {
+        if (s is MenuScreen) tutorial = null
         stack.forEach { it.dispose() }
         stack.clear()
         push(s)
@@ -81,6 +82,7 @@ class GameView(context: Context) : View(context) {
     fun hasSave() = saveFile.exists()
 
     fun startGame(g: Game) {
+        tutorial = null
         game = g
         attachListener(g)
         lastSavedDay = g.day
@@ -89,6 +91,7 @@ class GameView(context: Context) : View(context) {
     }
 
     fun loadGame(): Boolean = try {
+        tutorial = null
         val g = Game.fromJson(saveFile.readText())
         game = g
         attachListener(g)
@@ -111,7 +114,27 @@ class GameView(context: Context) : View(context) {
         }
     }
 
+    /** Apprentissage en cours (partie d'entraînement jamais sauvegardée). */
+    var tutorial: Tutorial? = null
+        private set
+
+    fun startTutorial(full: Boolean) {
+        game = Tutorial.newGame()
+        attachListener(game!!)
+        tutorial = Tutorial(full)
+        lastSavedDay = game!!.day
+        replaceAll(HubScreen(this))
+        tutorial = Tutorial(full)
+    }
+
+    fun endTutorial(keep: Boolean) {
+        tutorial = null
+        if (keep) { save(); gui.toast("Ce domaine est maintenant ta partie. Bon jeu !", Pal.GREEN) }
+        else { game = null; replaceAll(MenuScreen(this)); push(NewGameScreen(this)) }
+    }
+
     fun save() {
+        if (tutorial != null) return
         val g = game ?: return
         try {
             val tmp = File(saveFile.parentFile, "haras.tmp")
@@ -156,8 +179,10 @@ class GameView(context: Context) : View(context) {
         gui.update(dt)
         val s = screen
         s.update(dt)
+        tutorial?.update(this, dt)
         gui.begin()
         s.draw(c)
+        tutorial?.draw(c, this)
         gui.drawToasts(c)
         gui.end()
     }

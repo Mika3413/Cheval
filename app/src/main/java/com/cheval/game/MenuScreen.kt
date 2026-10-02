@@ -23,6 +23,7 @@ class MenuScreen(app: GameView) : Screen(app) {
     private val poses = List(2) { HorsePose().apply { gait = Gait.GRAND_GALOP; speedBlend = 0.8f; neck = 30f; head = 52f } }
     private val amb = Ambience(hour = 20.6f, season = Season.ETE, sky = Sky.SOLEIL, sunrise = 6f, sunset = 21.4f)
     private var confirmNew = false
+    private var chooseTuto = false
 
     init { horses[1].genome.alleles[com.cheval.core.Locus.GREY.ordinal * 2] = 1 }
 
@@ -67,10 +68,26 @@ class MenuScreen(app: GameView) : Screen(app) {
             if (app.hasSave()) confirmNew = true else app.push(NewGameScreen(app))
         }
         y += 50f * u
+        gui.button(c, RectF(bx, y, bx + bw, y + 40f * u), "Apprentissage", Btn.GOLD, size = 14f) { app.sound.play(SoundFx.S.CLICK); chooseTuto = true }
+        y += 50f * u
         gui.button(c, RectF(bx, y, bx + bw, y + 40f * u), "Guide du cavalier", size = 14f) { app.sound.play(SoundFx.S.CLICK); app.push(HelpScreen(app)) }
         y += 50f * u
         gui.button(c, RectF(bx, y, bx + bw, y + 34f * u), if (app.sound.enabled) "Son : activé" else "Son : coupé", Btn.GHOST, size = 12f) { app.toggleSound() }
         gui.text(c, "Version 1.0 — tout est dessiné et synthétisé par le jeu", w - 14f * u, h - 10f * u, 9f, HorseArt.alpha(Pal.CREAM, 0.7f), Paint.Align.RIGHT)
+        if (chooseTuto) {
+            gui.modal(c)
+            val r = RectF(w / 2 - 230f * u, h / 2 - 120f * u, w / 2 + 230f * u, h / 2 + 120f * u)
+            gui.paper(c, r)
+            gui.text(c, "Apprentissage", r.left + 20f * u, r.top + 32f * u, 19f, Ink.INK, font = Ink.hand)
+            gui.wrap(c, "Un domaine d'entraînement, à part de ta sauvegarde, pour apprendre en jouant.", r.left + 20f * u, r.top + 56f * u, r.width() - 40f * u, 11.5f, Ink.INK)
+            gui.button(c, RectF(r.left + 20f * u, r.top + 82f * u, r.right - 20f * u, r.top + 124f * u), "Apprentissage complet", Btn.PRIMARY, size = 14f, sub = "tout le jeu pas à pas · environ 10 min") {
+                chooseTuto = false; app.sound.play(SoundFx.S.NEIGH, 0.5f); app.startTutorial(full = true)
+            }
+            gui.button(c, RectF(r.left + 20f * u, r.top + 132f * u, r.right - 20f * u, r.top + 174f * u), "Apprentissage rapide", Btn.GOLD, size = 14f, sub = "l'essentiel · environ 2 min") {
+                chooseTuto = false; app.sound.play(SoundFx.S.NEIGH, 0.5f); app.startTutorial(full = false)
+            }
+            gui.button(c, RectF(r.right - 120f * u, r.bottom - 42f * u, r.right - 20f * u, r.bottom - 12f * u), "Annuler", size = 12f) { chooseTuto = false }
+        }
         if (confirmNew) {
             gui.modal(c)
             val r = RectF(w / 2 - 170f * u, h / 2 - 70f * u, w / 2 + 170f * u, h / 2 + 70f * u)
@@ -84,5 +101,5 @@ class MenuScreen(app: GameView) : Screen(app) {
         }
     }
 
-    override fun onBack(): Boolean { if (confirmNew) { confirmNew = false; return true }; return false }
+    override fun onBack(): Boolean { if (confirmNew || chooseTuto) { confirmNew = false; chooseTuto = false; return true }; return false }
 }

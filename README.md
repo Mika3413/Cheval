@@ -9,6 +9,7 @@ Jeu Android d'élevage et d'équitation **réaliste** : vous dirigez un haras su
 - **Style illustré** : carte du domaine en vue de trois quarts, encre et aquarelle, interface en planches de bois et parchemins.
 - **Journée de travail** de 7 h à 21 h : chaque action prend du temps, puis « Nouvelle journée » et le rapport de la nuit.
 - **Domaine à l'abandon** au départ : caravane, vieil abri de 2 boxes, déchets à débarrasser, bâtiments à restaurer sur la carte.
+- **Apprentissage** depuis le menu : parcours complet (18 étapes guidées) ou rapide (6 étapes), sur un domaine d'entraînement séparé de votre sauvegarde.
 - **Objectifs** récompensés (23 étapes, du premier pansage au Grand Prix), **cours d'équitation** à donner, stats de **Force** et **Confiance**.
 - **Chevaux vivants au paddock** : promenade, demi-tours, troupeau qui reste groupé, poulains qui suivent leur mère, sieste couchée la nuit.
 - **10 modes de monte** : balade, dressage (figures et cadence), CSO, hunter, cross, course de galop, trot attelé au sulky, endurance, barrel race western, travail sur le plat.

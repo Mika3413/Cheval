@@ -41,6 +41,24 @@ class ScreenshotTest {
         view.layoutForTest(w, h)
         view.stepForTest(1.5f)
         save(view, "01_menu")
+        val fTuto = MenuScreen::class.java.getDeclaredField("chooseTuto"); fTuto.isAccessible = true
+        fTuto.setBoolean(view.screen, true); view.stepForTest(0.2f)
+        save(view, "01b_menu_apprentissage")
+        fTuto.setBoolean(view.screen, false)
+        // apprentissage complet : premières étapes
+        view.startTutorial(true); view.stepForTest(1f)
+        save(view, "01c_tuto_bienvenue")
+        val tu = view.tutorial!!
+        val fIdx = Tutorial::class.java.getDeclaredField("index"); fIdx.isAccessible = true
+        fIdx.setInt(tu, 2); view.stepForTest(3f)
+        save(view, "01d_tuto_ecurie")
+        fIdx.setInt(tu, 4); view.stepForTest(1f)
+        save(view, "01e_tuto_chevaux")
+        view.replaceAll(MenuScreen(view))
+        view.startTutorial(false); view.stepForTest(1f)
+        fIdx.setInt(view.tutorial!!, 3); view.stepForTest(1f)
+        save(view, "01f_tuto_rapide_temps")
+        view.replaceAll(MenuScreen(view))
         view.push(NewGameScreen(view)); view.stepForTest(0.5f)
         save(view, "02_new_game")
         // partie de démonstration : le domaine à l'abandon du début
