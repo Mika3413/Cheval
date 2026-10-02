@@ -101,8 +101,20 @@ class ScreenshotTest {
             val f = HorseScreen::class.java.getDeclaredField("tab"); f.isAccessible = true; f.setInt(s, tab)
             view.stepForTest(0.2f); save(view, "07_fiche_onglet_$tab"); view.pop()
         }
+        hz.sessionsToday = 1
         view.push(GroomScreen(view, hz)); view.stepForTest(0.5f)
         save(view, "08_pansage")
+        val gs = view.screen as GroomScreen
+        // étrille en cercles sur l'épaule et la côte, puis brosse dure dans le sens du poil, brosse douce sur l'avant
+        fun circles(cx: Float, cy: Float, n: Int): FloatArray = FloatArray(n * 2) { i -> val a = (i / 2) * 0.5f; if (i % 2 == 0) cx + kotlin.math.cos(a) * 0.05f else cy + kotlin.math.sin(a) * 0.04f }
+        for (k in 0..3) gs.demo(0, circles(0.3f - k * 0.12f, -0.8f, 120))
+        for (k in 0..5) gs.demo(1, floatArrayOf(0.4f - k * 0.04f, -0.95f, 0.25f - k * 0.04f, -0.86f, 0.1f - k * 0.04f, -0.79f, -0.05f - k * 0.04f, -0.72f))
+        for (k in 0..4) gs.demo(2, floatArrayOf(0.42f - k * 0.03f, -0.98f, 0.3f - k * 0.03f, -0.9f, 0.18f - k * 0.03f, -0.84f))
+        view.stepForTest(0.3f)
+        save(view, "08b_pansage_en_cours")
+        gs.demo(4, floatArrayOf(0.3f, -0.03f, 0.3f, -0.03f), openHoof = 0)
+        view.stepForTest(0.6f)
+        save(view, "08c_cure_pied")
         view.pop()
         val fDist = RideScreen::class.java.getDeclaredField("dist"); fDist.isAccessible = true
         val fGait = RideScreen::class.java.getDeclaredField("gaitIdx"); fGait.isAccessible = true

@@ -75,7 +75,7 @@ class Tutorial(val full: Boolean) {
             TutoStep("Sa fiche de santé", "À droite, ses besoins : satiété, eau, propreté, moral, santé, sabots… Une jauge rouge, c'est urgent. Fais défiler vers le bas : tu trouveras la ration et tous les soins. Touche « Panser » pour le brosser.", screen = HorseScreen::class.java,
                 target = { app -> val u = app.gui.u; RectF(app.gui.w * 0.42f + 10f * u, 88f * u, app.gui.w - 10f * u, app.gui.h - 10f * u) },
                 done = { it.screen is GroomScreen || (it.game?.stats?.get(St.GROOM) ?: 0) > 0 }),
-            TutoStep("Le pansage", "Frotte la boue avec l'étrille (en rond), puis passe la brosse dure, la brosse douce sur la tête et pour finir, cure les 4 sabots. Touche « Terminer » quand il brille.", screen = GroomScreen::class.java,
+            TutoStep("Le pansage", "L'étrille en petits cercles décolle la boue (jamais sur la tête). La brosse dure chasse la poussière dans le sens du poil, la brosse douce fait briller et soigne la tête. Démêle les crins au peigne, puis cure les pieds. Touche « Terminer » quand il brille.", screen = GroomScreen::class.java,
                 target = { app -> val u = app.gui.u; RectF(8f * u, app.gui.h - 62f * u, app.gui.w - 10f * u, app.gui.h - 8f * u) },
                 done = { (it.game?.stats?.get(St.GROOM) ?: 0) > 0 }),
             TutoStep("En selle !", "Touche l'onglet « Travail », puis « Monter » sur la ligne « Balade en extérieur ».", screen = HorseScreen::class.java,

@@ -530,22 +530,32 @@ class Game(seed: Long, var stableName: String = "Haras de la Baie") {
     }
 
     /** Pansage : [quality] 0..1 selon la minutie (mini-jeu). */
-    fun groom(h: Horse, quality: Float): Res {
+    /**
+     * Pansage. [quality] : propreté obtenue (0..1). [hoofPicks] : nombre de pieds curés.
+     * [rough] : brusquerie (0 = gestes doux, 1 = cheval très contrarié), qui gâche le bénéfice relationnel.
+     */
+    fun groom(h: Horse, quality: Float, hoofPicks: Int = 4, rough: Float = 0f): Res {
         val q = quality.coerceIn(0f, 1f)
+        val r = rough.coerceIn(0f, 1f)
         h.cleanliness = min(100f, h.cleanliness + 30f + 60f * q)
         val first = h.lastGroomDay != day
         h.lastGroomDay = day
         if (first) {
-            h.bond = min(100f, h.bond + 2f + 3f * q * (if (Personality.CALIN in h.personality) 1.6f else 1f))
-            h.morale = min(100f, h.morale + 6f * q)
-            h.stress = max(0f, h.stress - 8f)
+            h.bond = min(100f, h.bond + (2f + 3f * q * (if (Personality.CALIN in h.personality) 1.6f else 1f)) * (1f - r))
+            h.morale = min(100f, h.morale + 6f * q * (1f - r * 0.7f))
+            h.stress = max(0f, h.stress - 8f * (1f - r))
+            if (r > 0.5f) h.stress = min(100f, h.stress + 6f * r)
         }
         stat(St.GROOM)
-        h.confidence = min(100f, h.confidence + 1f + q)
-        // On cure les pieds pendant le pansage : prévient abcès et pourriture de fourchette
-        h.hooves = min(100f, h.hooves + 1f)
+        h.confidence = min(100f, h.confidence + (1f + q) * (1f - r))
+        // Curer les pieds chaque jour prévient abcès et pourriture de fourchette
+        h.hooves = min(100f, h.hooves + 0.5f * hoofPicks.coerceIn(0, 4))
         rider.hoursRidden += 0.05f
-        return Res.ok(if (q > 0.85f) "${h.name} brille comme un sou neuf !" else "Pansage terminé.")
+        return Res.ok(when {
+            r > 0.6f -> "Pansage terminé, mais ${h.name} a trouvé le moment désagréable."
+            q > 0.85f -> "${h.name} brille comme un sou neuf !"
+            else -> "Pansage terminé."
+        })
     }
 
     fun treat(h: Horse): Res {

@@ -42,7 +42,14 @@ Jeu Android d'élevage et d'équitation **réaliste** : vous dirigez un haras su
 - **Nutrition** : la ration de foin et de granulés est réglable. Une note d'état corporel Henneke (1 à 9) et le poids évoluent selon le bilan énergétique (entretien, travail, croissance, gestation, lactation, froid). Un poulain sous-alimenté grandira moins.
 - **15 affections**, chacune avec ses causes réalistes : colique (gros repas de céréales, jeûne, déshydratation), fourbure, boiterie, tendinite, abcès, gale de boue, grippe et gourme (contagieuses, la grippe évitée par le vaccin), tétanos après une plaie, ulcères, parasitisme, coup de chaleur, arthrose et mélanome chez les gris âgés.
 - **Soins** : vétérinaire, maréchal (parage ou ferrure), dentiste, vaccins, vermifuge, couverture, tonte.
-- **Pansage au doigt** : l'étrille pour décoller la boue, la brosse dure, la brosse douce pour la tête et la finition, le cure-pied pour chaque sabot. L'ordre compte, et le cheval réagit.
+- **Pansage au doigt, au plus près du vrai** :
+  - La saleté est peinte sur la robe : boue des roulades et des membres, poussière, sueur séchée sous la selle, taches de litière. Elle part exactement là où passe l'outil.
+  - L'étrille travaille en petits cercles, se remplit de poils (surtout pendant la mue) et se tape pour la vider. Elle fait mal sur la tête et les canons.
+  - La brosse dure s'utilise dans le sens du poil. La brosse douce fait briller et c'est la seule pour la tête.
+  - Le peigne démêle les crins en commençant par le bas.
+  - Le cure-pied se passe pied levé, en gros plan, du talon vers la pince : il révèle les cailloux, la pourriture de fourchette et le fer qui bouge.
+  - Le cheval réagit : il remue la lèvre quand on lui gratte le garrot, couche les oreilles ou tape du pied quand il est brusqué.
+  - L'inspection révèle les plaies, la gale de boue, les tiques et les membres chauds.
 
 ![Fiche](docs/screenshots/06_fiche_soins.png)
 ![Pansage](docs/screenshots/08_pansage.png)

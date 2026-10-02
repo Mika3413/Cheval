@@ -66,8 +66,13 @@ class HorsePose {
     var speedBlend = 0f // 0..1 crins au vent
     /** 0 debout … 1 couché sur le sternum (repos, sommeil). */
     var lie = 0f
+    /** Membre levé (0 antérieur proche, 1 postérieur proche, 2 antérieur loin, 3 postérieur loin), −1 aucun. */
+    var liftLeg = -1
+    var lift = 0f
+    /** Lèvre supérieure qui s'allonge et remue (plaisir quand on gratte le garrot). */
+    var lip = 0f
 
-    fun copyFrom(o: HorsePose) { gait = o.gait; phase = o.phase; neck = o.neck; head = o.head; ears = o.ears; tailSwing = o.tailSwing; tailLift = o.tailLift; blink = o.blink; jump = o.jump; jumpHeight = o.jumpHeight; breathe = o.breathe; speedBlend = o.speedBlend; lie = o.lie }
+    fun copyFrom(o: HorsePose) { gait = o.gait; phase = o.phase; neck = o.neck; head = o.head; ears = o.ears; tailSwing = o.tailSwing; tailLift = o.tailLift; blink = o.blink; jump = o.jump; jumpHeight = o.jumpHeight; breathe = o.breathe; speedBlend = o.speedBlend; lie = o.lie; liftLeg = o.liftLeg; lift = o.lift; lip = o.lip }
 }
 
 /** Ce qu'il faut savoir d'un cheval pour le dessiner. */
@@ -98,7 +103,7 @@ class Appearance(
 }
 
 /** Selle, filet, cavalier. */
-class Tack(var saddle: Boolean = false, var bridle: Boolean = false, var rider: Boolean = false, var riderPost: Float = 0f, var riderForward: Float = 0f,
+class Tack(var saddle: Boolean = false, var bridle: Boolean = false, var halter: Boolean = false, var rider: Boolean = false, var riderPost: Float = 0f, var riderForward: Float = 0f,
            var padColor: Int = 0xFF1F3B63.toInt(), var jacket: Int = 0xFF1C2A44.toInt(), var number: Int = 0)
 
 /**
@@ -194,10 +199,37 @@ object HorseArt {
     }
 
     private var curScale = 1f
+    // Dernier dessin : permet de retrouver à l'écran la tête, la crinière, la queue et les sabots.
+    private var lastX = 0f; private var lastY = 0f; private var lastScale = 1f; private var lastRight = true
+    private val tailM = FloatArray(4)
+    private val maneM = FloatArray(6)
+    private fun sx(mx: Float) = lastX + (if (lastRight) mx else -mx) * lastScale
+    private fun sy(my: Float) = lastY + my * lastScale
+    /** Point de la tête (u le long du chanfrein, v vers le haut), en coordonnées écran. */
+    fun headPoint(u: Float, v: Float, out: android.graphics.PointF) { out.set(sx(hx(u, v)), sy(hy(u, v))) }
+    /** Point de la queue : t = 0 à la base, 1 au bout des crins. */
+    fun tailPoint(t: Float, out: android.graphics.PointF) { out.set(sx(tailM[0] + (tailM[2] - tailM[0]) * t), sy(tailM[1] + (tailM[3] - tailM[1]) * t)) }
+    /** Point de la crinière : t = 0 à la nuque, 1 au garrot ; drop = vers le bas des crins (0..1). */
+    fun manePoint(t: Float, drop: Float, out: android.graphics.PointF) {
+        val u = 1f - t
+        val x = u * u * maneM[0] + 2 * u * t * maneM[2] + t * t * maneM[4]
+        val y = u * u * maneM[1] + 2 * u * t * maneM[3] + t * t * maneM[5]
+        out.set(sx(x), sy(y + drop * lastManeLen))
+    }
+    private var lastManeLen = 0f
+    /** Sabot du membre i (même numérotation que [HorsePose.liftLeg]), en coordonnées écran. */
+    fun hoofPoint(i: Int, out: android.graphics.PointF) { val lg = legs[i]; out.set(sx(lg.cor.x), sy(lg.cor.y)) }
+    fun legPoint(i: Int, t: Float, out: android.graphics.PointF) {
+        // t = 0 au coude ou au grasset, 0,5 au genou ou au jarret, 1 à la couronne
+        val lg = legs[i]
+        if (t < 0.5f) { val k = t * 2f; out.set(sx(lg.top.x + (lg.mid.x - lg.top.x) * k), sy(lg.top.y + (lg.mid.y - lg.top.y) * k)) }
+        else { val k = (t - 0.5f) * 2f; out.set(sx(lg.mid.x + (lg.cor.x - lg.mid.x) * k), sy(lg.mid.y + (lg.cor.y - lg.mid.y) * k)) }
+    }
 
     private fun drawInternal(c: Canvas, a: Appearance, pose: HorsePose, x: Float, groundY: Float, scale: Float, facingRight: Boolean,
              light: Float, tack: Tack?, shadow: Boolean) {
         curScale = scale
+        lastX = x; lastY = groundY; lastScale = scale; lastRight = facingRight
         c.save()
         c.translate(x, groundY)
         c.scale(if (facingRight) scale else -scale, scale)
@@ -301,6 +333,15 @@ object HorseArt {
                 hy += (0f - hy) * lie
                 swingT += (0.9f - swingT) * lie
                 stanceNow = lie < 0.5f && stanceNow
+            }
+            if (i == pose.liftLeg && pose.lift > 0f) {
+                // pied donné : le membre se replie, sabot vers le haut
+                val k = pose.lift.coerceIn(0f, 1f)
+                val tx = if (lg.front) restX - H * 0.1f else restX + H * 0.04f
+                val ty = if (lg.front) -H * 0.25f else -H * 0.18f
+                hx += (tx - hx) * k; hy += (ty - hy) * k
+                swingT += (0.5f - swingT) * k
+                if (k > 0.5f) stanceNow = false
             }
             lg.stance = stanceNow
             // Paturon : incliné à ~55° en appui, fléchi pendant le soutien
@@ -455,6 +496,7 @@ object HorseArt {
             c.drawLine(bx(L * 0.21f, topY + H * 0.22f), by(L * 0.21f, topY + H * 0.22f), bx(L * 0.23f, chestY + H * 0.02f), by(L * 0.23f, chestY + H * 0.02f), stroke)
         }
         if (tack != null && tack.bridle) drawBridle(c, lightK)
+        if (tack != null && tack.halter && !tack.bridle) drawHalter(c, lightK)
         if (tack != null && tack.rider) drawRider(c, H, L, topY, tack, lightK)
         c.restore()
     }
@@ -782,6 +824,7 @@ object HorseArt {
         val sway = pose.tailSwing * H * 0.06f
         val ex = dx - len * (0.12f + wind * 0.65f) + sway; val ey = dy + len * (1f - wind * 0.55f - lift * 0.15f)
         val w0 = H * 0.045f; val w1 = H * (0.075f + a.m.maneLength * 0.04f)
+        tailM[0] = dx; tailM[1] = dy; tailM[2] = ex; tailM[3] = ey
         tmp.reset()
         tmp.moveTo(x0 + H * 0.01f, y0 - w0 * 0.6f)
         tmp.quadTo(dx + w0 * 0.2f, dy - w0 * 1.1f, dx - w0, dy - w0 * 0.2f)
@@ -849,6 +892,8 @@ object HorseArt {
             xs[i] = u * u * u * px + 3 * u * u * t * m2x + 3 * u * t * t * m1x + t * t * t * wx
             ys[i] = u * u * u * py + 3 * u * u * t * m2y + 3 * u * t * t * m1y + t * t * t * wy
         }
+        maneM[0] = xs[0]; maneM[1] = ys[0]; maneM[2] = 2f * xs[n / 2] - (xs[0] + xs[n]) / 2f; maneM[3] = 2f * ys[n / 2] - (ys[0] + ys[n]) / 2f; maneM[4] = xs[n]; maneM[5] = ys[n]
+        lastManeLen = len
         // la crinière part légèrement au-dessus de la crête et retombe du côté visible
         tmp.reset()
         tmp.moveTo(xs[0] + npx * H * 0.01f, ys[0] + npy * H * 0.01f)
@@ -1029,6 +1074,16 @@ object HorseArt {
         // os de la ganache et veines du chanfrein
         stroke.color = alpha(Color.BLACK, 0.12f); stroke.strokeWidth = hL * 0.012f
         tmp.reset(); tmp.moveTo(hx(0.48f, -0.04f), hy(0.48f, -0.04f)); tmp.quadTo(hx(0.62f, 0.0f), hy(0.62f, 0.0f), hx(0.78f, -0.02f), hy(0.78f, -0.02f)); c.drawPath(tmp, stroke)
+        if (pose.lip > 0.05f) {
+            // lèvre supérieure tendue qui remue, comme lors du toilettage mutuel au pré
+            val k = pose.lip; val wig = sin(pose.breathe * 40f) * 0.03f * k
+            tmp.reset()
+            tmp.moveTo(hx(0.93f, 0.02f), hy(0.93f, 0.02f))
+            tmp.quadTo(hx(1.04f + 0.06f * k, 0.0f + wig), hy(1.04f + 0.06f * k, 0.0f + wig), hx(1.0f + 0.05f * k, -0.05f + wig), hy(1.0f + 0.05f * k, -0.05f + wig))
+            tmp.lineTo(hx(0.93f, -0.04f), hy(0.93f, -0.04f)); tmp.close()
+            fill.shader = null; fill.color = shade(look.skin, lightK); c.drawPath(tmp, fill)
+            stroke.color = alpha(Color.BLACK, 0.5f); stroke.strokeWidth = hL * 0.012f; c.drawPath(tmp, stroke)
+        }
     }
 
     // ---------------------------------------------------------------- équipement
@@ -1097,6 +1152,23 @@ object HorseArt {
         fill.shader = null
         fill.color = shade(0xFFC8C8C8.toInt(), lightK)
         c.drawCircle(hx(0.87f, -0.05f), hy(0.87f, -0.05f), hL * 0.035f, fill)
+    }
+
+    /** Licol en sangle avec son anneau sous la ganache. */
+    private fun drawHalter(c: Canvas, lightK: Float) {
+        stroke.shader = null
+        val col = shade(0xFFB0302A.toInt(), lightK)
+        stroke.color = col; stroke.strokeWidth = hL * 0.045f
+        c.drawLine(hx(0.02f, 0.13f), hy(0.02f, 0.13f), hx(0.1f, -0.21f), hy(0.1f, -0.21f), stroke)   // têtière et sous-gorge
+        c.drawLine(hx(0.1f, -0.06f), hy(0.1f, -0.06f), hx(0.62f, 0.0f), hy(0.62f, 0.0f), stroke)     // montant
+        c.drawLine(hx(0.6f, 0.17f), hy(0.6f, 0.17f), hx(0.64f, -0.13f), hy(0.64f, -0.13f), stroke)   // muserolle
+        c.drawLine(hx(0.12f, -0.22f), hy(0.12f, -0.22f), hx(0.62f, -0.13f), hy(0.62f, -0.13f), stroke) // sous-barbe
+        stroke.color = alpha(Color.WHITE, 0.25f); stroke.strokeWidth = hL * 0.012f
+        c.drawLine(hx(0.6f, 0.15f), hy(0.6f, 0.15f), hx(0.635f, -0.11f), hy(0.635f, -0.11f), stroke)
+        fill.shader = null
+        stroke.color = shade(0xFFC8C8C8.toInt(), lightK); stroke.strokeWidth = hL * 0.018f
+        c.drawCircle(hx(0.1f, -0.06f), hy(0.1f, -0.06f), hL * 0.025f, stroke)
+        c.drawCircle(hx(0.63f, -0.17f), hy(0.63f, -0.17f), hL * 0.035f, stroke)
     }
 
     private fun limb(c: Canvas, x1: Float, y1: Float, x2: Float, y2: Float, w: Float, col: Int) {
