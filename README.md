@@ -12,6 +12,8 @@ Jeu Android d'élevage et d'équitation **réaliste** : vous dirigez un haras su
 - **Apprentissage** depuis le menu : parcours complet (18 étapes guidées) ou rapide (6 étapes), sur un domaine d'entraînement séparé de votre sauvegarde.
 - **Objectifs** récompensés (23 étapes, du premier pansage au Grand Prix), **cours d'équitation** à donner, stats de **Force** et **Confiance**.
 - **Chevaux vivants au paddock** : promenade, demi-tours, troupeau qui reste groupé, poulains qui suivent leur mère, sieste couchée la nuit.
+- **Objectifs guidés** : touchez un objectif, la carte défile jusqu'au lieu et une flèche montre où aller.
+- **Haute école** : piaffer et passage en séance, au Grand Prix de dressage et en cours de dressage avancé donné en selle devant les élèves.
 - **10 modes de monte** : balade, dressage (figures et cadence), CSO, hunter, cross, course de galop, trot attelé au sulky, endurance, barrel race western, travail sur le plat.
 
 ![Début de partie](docs/screenshots/03_domaine_debut.png)
@@ -22,7 +24,8 @@ Jeu Android d'élevage et d'équitation **réaliste** : vous dirigez un haras su
 
 **Rendu anatomique, sans aucune image.** Chaque cheval est dessiné par le code sur un squelette : tronc, encolure et tête articulés, et membres en cinématique inverse (coude-genou-boulet devant, cuisse-jarret-boulet derrière). Le rendu suit :
 
-- **Les allures réelles**, avec leur schéma de foulée : pas à 4 temps latéral, trot diagonal, galop à 3 temps avec temps de suspension, grand galop à 4 temps. Le saut se fait en 5 phases (battue, planer, réception).
+- **Les allures réelles**, avec leur schéma de foulée : pas à 4 temps latéral, trot diagonal, galop à 3 temps avec temps de suspension, grand galop à 4 temps. Le saut se fait en 5 phases (battue, planer, réception). Les membres se plient vraiment (genou et jarret repliés au soutien, bascule du pied avant le départ), le cheval se rassemble ou s'allonge, et les crins rebondissent à chaque battue.
+- **Le piaffer et le passage** : trot sur place, avant-bras à l'horizontale et hanches abaissées ; trot suspendu au ralenti.
 - **La morphologie de la race** : tête concave de l'arabe, busquée du lusitanien, fanons du frison, masse du percheron, port de queue.
 - **L'état du cheval** : côtes visibles s'il est maigre, ventre rond s'il est gros, musculature, brillance du poil, boue s'il est sale, couverture l'hiver. Les poulains ont des membres longs, une tête plus grosse et une encolure courte.
 

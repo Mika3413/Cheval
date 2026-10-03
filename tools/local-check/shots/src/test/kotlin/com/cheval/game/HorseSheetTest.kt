@@ -50,6 +50,15 @@ class HorseSheetTest {
             HorseArt.draw(c2, a, pose, 300f + k * 600f, 340f + r * 390f, 1.7f, tack = Tack(saddle = true, bridle = true, rider = r % 2 == 0))
         }
         save(bmp2, "horses_gaits")
+        // haute école : passage, piaffer, et trot allongé pour comparer
+        val bmp4 = Bitmap.createBitmap(2400, 1200, Bitmap.Config.ARGB_8888)
+        val c4 = Canvas(bmp4); c4.drawColor(0xFFDCE6D0.toInt())
+        val hs = listOf(Triple(Gait.PASSAGE, 0.85f, "passage"), Triple(Gait.PIAFFER, 1f, "piaffer"), Triple(Gait.TROT, -1f, "allongé"))
+        for ((r, row) in hs.withIndex()) for (k in 0..3) {
+            val pose = HorsePose().apply { gait = row.first; phase = k / 4f; collect = row.second; neck = if (row.second > 0f) 56f else 40f; head = if (row.second > 0f) 8f else 30f; tailLift = 0.2f }
+            HorseArt.draw(c4, a, pose, 300f + k * 600f, 350f + r * 390f, 1.7f, tack = Tack(saddle = true, bridle = true, rider = true))
+        }
+        save(bmp4, "horses_haute_ecole")
         val bmp3 = Bitmap.createBitmap(2400, 500, Bitmap.Config.ARGB_8888)
         val c3 = Canvas(bmp3); c3.drawColor(0xFFDCE6D0.toInt())
         for (k in 0..5) {

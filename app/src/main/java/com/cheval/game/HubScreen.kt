@@ -6,6 +6,7 @@ import android.graphics.Paint
 import android.graphics.RectF
 import com.cheval.core.BuildingType
 import com.cheval.core.Cal
+import com.cheval.core.Goal
 import com.cheval.core.Goals
 import com.cheval.core.Horse
 import com.cheval.core.Junk
@@ -51,6 +52,11 @@ class HubScreen(app: GameView) : Screen(app) {
     private var modal: (Canvas.() -> Unit)? = null
     private var report: List<String>? = null
     private var lessonPick = HashSet<Int>()
+    private var lessonAdvanced = false
+
+    /** Repère d'objectif : la carte défile jusqu'au lieu et une flèche le montre. */
+    private class Guide(val title: String, val text: String, val where: () -> RectF?) { var life = 12f }
+    private var guide: Guide? = null
     private var lastMsgCount = 0
 
     override fun resize(w: Int, h: Int) { art.resize(w.toFloat(), h.toFloat()); camX = (art.mapW * 0.3f - w * 0.45f).coerceIn(0f, max(0f, art.mapW - w)) }
@@ -61,6 +67,7 @@ class HubScreen(app: GameView) : Screen(app) {
         t += dt
         if (art.mapW <= 1f) return
         if (panTarget >= 0f) { camX += (panTarget - camX) * min(1f, dt * 5f); if (abs(panTarget - camX) < 2f) panTarget = -1f }
+        guide?.let { it.life -= dt; if (it.life <= 0f) guide = null }
         val g = game
         val paddocks = art.paddocks(g.level(BuildingType.PRE))
         val atPre = g.owned().filter { it.place == Place.PRE }
@@ -144,7 +151,7 @@ class HubScreen(app: GameView) : Screen(app) {
         }
         if (dist < 6f * art.k && a.state == 1) { a.state = 0; a.timer = 3f + (h.id % 5) }
         p.breathe = (p.breathe + dt * 0.22f) % 1f
-        p.speedBlend += ((if (gait.ordinal >= Gait.GALOP.ordinal) 0.6f else 0f) - p.speedBlend) * min(1f, dt * 2f)
+        p.speedBlend += ((if (gait == Gait.GALOP || gait == Gait.GRAND_GALOP) 0.6f else 0f) - p.speedBlend) * min(1f, dt * 2f)
         val lieTarget = if (a.state == 4) 1f else 0f
         p.lie += (lieTarget - p.lie) * min(1f, dt * 0.9f)
         val tNeck = when { p.lie > 0.5f -> 18f; a.state == 0 -> -40f; a.state == 3 -> 60f; a.state == 2 -> 38f; else -> 30f }
@@ -220,6 +227,7 @@ class HubScreen(app: GameView) : Screen(app) {
         for ((id, r) in hitHorses) gui.hit(r) { app.sound.play(SoundFx.S.WHINNY_SHORT, 0.4f, 1.1f); g.horse(id)?.let { app.push(HorseScreen(app, it)) } }
 
         drawHud(c, amb)
+        if (modal == null && report == null) guide?.let { drawGuide(c, it) }
         if (g.pendingLive.isNotEmpty() && modal == null && report == null) livePrompt(c)
         report?.let { drawReport(c, it) }
         modal?.let { it(c) }
@@ -259,6 +267,80 @@ class HubScreen(app: GameView) : Screen(app) {
     fun hudObjectifs() = RectF(gui.w - 330f * gui.u, 8f * gui.u, gui.w - 234f * gui.u, 36f * gui.u)
     fun hudNewDay() = RectF(gui.w - 228f * gui.u, 8f * gui.u, gui.w - 108f * gui.u, 36f * gui.u)
     fun hudClock() = RectF(gui.w - 230f * gui.u, 40f * gui.u, gui.w - 58f * gui.u, 60f * gui.u)
+    private fun mailboxRect(): RectF { val x = art.px(0.15f) - camX; val y = art.py(0.6f); val u = gui.u; return RectF(x - 14f * u, y - 30f * u, x + 14f * u, y + 2f * u) }
+
+    /** Ferme les objectifs et montre l'endroit où réaliser [goal]. */
+    private fun showGoal(goal: Goal) {
+        val g = game
+        modal = null
+        app.sound.play(SoundFx.S.PAGE, 0.6f)
+        fun plot(b: BuildingType, text: String): Guide { focusPlot(b); return Guide(goal.title, text) { plotRect(b) } }
+        guide = when (goal.id) {
+            "soins" -> plot(BuildingType.ECURIE, "Touche l'écurie, puis « Tournée de soins » : foin, eau et litière pour tout le monde.")
+            "pansage" -> Guide(goal.title, "Ouvre « Chevaux », choisis ton cheval, puis « Panser » sur sa fiche.") { hudShelf(0) }
+            "balade" -> Guide(goal.title, "Ouvre « Chevaux », choisis ton cheval, onglet « Travail », puis « Monter ».") { hudShelf(0) }
+            "menage", "menage2" -> if (g.junk.isEmpty()) Guide(goal.title, "Plus aucun déchet : réclame ta récompense !") { hudObjectifs() }
+                else { focusJunk(); Guide(goal.title, "Touche ce tas de déchets pour le débarrasser (${g.junk.size} restant${if (g.junk.size > 1) "s" else ""}).") { junkRect() } }
+            "cours", "cours10" -> if (g.level(BuildingType.CARRIERE) > 0) plot(BuildingType.CARRIERE, "Touche la carrière pour donner un cours d'équitation.")
+                else plot(BuildingType.CARRIERE, "Construis d'abord la carrière sur ce terrain : c'est là que se donnent les cours.")
+            "ecurie" -> plot(BuildingType.ECURIE, "Touche la vieille écurie pour la restaurer.")
+            "carriere" -> plot(BuildingType.CARRIERE, "Touche ce terrain pour construire la carrière.")
+            "clubhouse" -> plot(BuildingType.CLUB_HOUSE, "Touche ce terrain pour construire le club-house.")
+            "manege" -> plot(BuildingType.MANEGE, "Touche ce terrain pour construire le manège couvert.")
+            "concours" -> { focus(0.1f); Guide(goal.title, "Le tableau d'affichage à l'entrée liste les concours : touche-le pour engager un cheval.") { boardRect() } }
+            "podium", "victoire", "amateur", "pro", "gp" -> Guide(goal.title, "Ouvre « Concours » et engage ton meilleur cheval dans une épreuve à sa portée.") { hudShelf(1) }
+            "reputation" -> Guide(goal.title, "La réputation grimpe avec les concours, les cours et des chevaux bien soignés.") { hudShelf(1) }
+            "cheval2" -> { focus(0.15f); Guide(goal.title, "La boîte aux lettres (ou « Marché » en bas) contient les annonces de chevaux à vendre.") { mailboxRect() } }
+            "vente" -> Guide(goal.title, "Ouvre « Marché » : mets un cheval en vente ou cède-le au marchand.") { hudShelf(3) }
+            "equipe" -> Guide(goal.title, "Ouvre « Domaine », onglet « Équipe », pour embaucher un palefrenier.") { hudShelf(4) }
+            "saillie", "poulain" -> Guide(goal.title, "Ouvre « Élevage » : choisis une jument en chaleur et un étalon.") { hudShelf(2) }
+            else -> Guide(goal.title, goal.desc) { null }
+        }
+    }
+
+    /** Flèche qui rebondit au-dessus du lieu, cadre doré qui pulse et bulle d'explication. */
+    private fun drawGuide(c: Canvas, gd: Guide) {
+        val u = gui.u; val w = gui.w; val h = gui.h
+        val a = gd.life.coerceAtMost(1f)
+        val r = gd.where()
+        val pulse = 1f + 0.08f * sin(t * 6f)
+        var tipX = w / 2f; var tipY = h * 0.45f; var down = true
+        if (r != null) {
+            val rr = RectF(r).apply { inset(-6f * u * pulse, -6f * u * pulse) }
+            // hors de l'écran : la flèche se met au bord et pointe dans la bonne direction
+            val off = rr.centerX() < 0f || rr.centerX() > w
+            if (!off) {
+                c.drawRoundRect(rr, 10f * u, 10f * u, Ink.stroke(HorseArt.alpha(Ink.INK, 0.7f * a), 5f * u))
+                c.drawRoundRect(rr, 10f * u, 10f * u, Ink.stroke(HorseArt.alpha(Pal.GOLD, a), 3f * u))
+            }
+            tipX = rr.centerX().coerceIn(30f * u, w - 30f * u)
+            down = rr.top > 120f * u
+            tipY = if (down) rr.top - 4f * u else rr.bottom + 4f * u
+        }
+        // flèche
+        val bounce = abs(sin(t * 4f)) * 10f * u
+        val dir = if (down) -1f else 1f
+        val baseY = tipY + dir * (14f * u + bounce)
+        val arrow = android.graphics.Path().apply {
+            moveTo(tipX, tipY + dir * bounce)
+            lineTo(tipX - 14f * u, baseY); lineTo(tipX - 5f * u, baseY); lineTo(tipX - 5f * u, baseY + dir * 26f * u)
+            lineTo(tipX + 5f * u, baseY + dir * 26f * u); lineTo(tipX + 5f * u, baseY); lineTo(tipX + 14f * u, baseY); close()
+        }
+        gui.p.shader = null; gui.p.color = HorseArt.alpha(Pal.GOLD, a); c.drawPath(arrow, gui.p)
+        c.drawPath(arrow, Ink.stroke(HorseArt.alpha(Ink.INK, a), 2f * u))
+        // bulle
+        val bw = 280f * u
+        val textH = gui.wrap(null, gd.text, 0f, 0f, bw - 24f * u, 11f)
+        val bh = textH + 40f * u
+        val bx = (tipX - bw / 2f).coerceIn(10f * u, w - bw - 10f * u)
+        val by = if (down) (baseY - 30f * u - bh).coerceAtLeast(48f * u) else (baseY + 30f * u).coerceAtMost(h - bh - 54f * u)
+        val bubble = RectF(bx, by, bx + bw, by + bh)
+        Ink.parchment(c, bubble, u)
+        gui.text(c, gd.title, bubble.left + 12f * u, bubble.top + 18f * u, 13f, HorseArt.alpha(Ink.INK, a), font = Ink.hand)
+        gui.wrap(c, gd.text, bubble.left + 12f * u, bubble.top + 34f * u, bw - 24f * u, 11f, HorseArt.alpha(Ink.INK, a))
+        gui.hit(bubble) { guide = null }
+    }
+
     fun hudShelf(i: Int): RectF {
         val u = gui.u
         val shelf = RectF(10f * u, gui.h - 46f * u, gui.w - 10f * u, gui.h - 6f * u)
@@ -364,26 +446,52 @@ class HubScreen(app: GameView) : Screen(app) {
     private fun arenaDialog(c: Canvas) {
         val g = game
         val u = gui.u
-        val r = dialogFrame(c, 520f, 280f, "Donner un cours d'équitation")
+        val r = dialogFrame(c, 540f, 300f, "Donner un cours d'équitation")
         val horses = g.owned().filter { it.backed && !it.injured }
-        gui.wrap(c, "1 h 30 · ${g.lessonStudents(max(1, lessonPick.size))} élève(s) attendu(s) · ${g.lessonPrice()} € par élève. Choisissez des chevaux calmes et en confiance : les élèves seront ravis.", r.left + 18f * u, r.top + 54f * u, r.width() - 36f * u, 11.5f, Ink.INK)
-        val list = RectF(r.left + 14f * u, r.top + 88f * u, r.right - 14f * u, r.bottom - 54f * u)
+        // type de cours
+        val tabW = (r.width() - 46f * u) / 2f
+        gui.button(c, RectF(r.left + 18f * u, r.top + 46f * u, r.left + 18f * u + tabW, r.top + 72f * u), "Cours débutants", if (!lessonAdvanced) Btn.TAB_ON else Btn.TAB, size = 11.5f) { lessonAdvanced = false }
+        gui.button(c, RectF(r.left + 28f * u + tabW, r.top + 46f * u, r.right - 18f * u, r.top + 72f * u), "Dressage avancé (piaffer, passage)", if (lessonAdvanced) Btn.TAB_ON else Btn.TAB, size = 11.5f) { lessonAdvanced = true }
+        val picked = g.owned().filter { it.id in lessonPick }
+        val info = if (!lessonAdvanced) "1 h 30 · ${g.lessonStudents(max(1, lessonPick.size))} élève(s) attendu(s) · ${g.lessonPrice()} € par élève. Choisissez des chevaux calmes et en confiance : les élèves seront ravis."
+            else "1 h 30 · 1 à 3 cavaliers confirmés · ${(g.lessonPrice() * 2.5f).toInt()} € par élève. Vous montrez le piaffer et le passage en direct, puis ils s'y essaient : un cheval confirmé en dressage est indispensable."
+        gui.wrap(c, info, r.left + 18f * u, r.top + 88f * u, r.width() - 36f * u, 10.5f, Ink.INK)
+        val list = RectF(r.left + 14f * u, r.top + 116f * u, r.right - 14f * u, r.bottom - 54f * u)
         gui.beginScroll(c, "lesson", list, horses.size * 30f * u)
         var y = list.top
         for (hz in horses) {
             val on = hz.id in lessonPick
-            gui.button(c, RectF(list.left, y, list.right - 6f * u, y + 26f * u), "${if (on) "☑" else "☐"}  ${hz.name} — confiance ${hz.confidence.toInt()} · énergie ${hz.energy.toInt()}", if (on) Btn.TAB_ON else Btn.GHOST, size = 11f) {
+            val extra = if (lessonAdvanced) "dressage ${hz.skill(com.cheval.core.Discipline.DRESSAGE).toInt()}" else "confiance ${hz.confidence.toInt()}"
+            gui.button(c, RectF(list.left, y, list.right - 6f * u, y + 26f * u), "${if (on) "☑" else "☐"}  ${hz.name} — $extra · énergie ${hz.energy.toInt()}", if (on) Btn.TAB_ON else Btn.GHOST, size = 11f) {
                 if (on) lessonPick.remove(hz.id) else lessonPick.add(hz.id)
             }
             y += 30f * u
         }
         if (horses.isEmpty()) gui.text(c, "Aucun cheval débourré disponible.", list.left, list.top + 18f * u, 12f, Pal.RED)
         gui.endScroll(c, "lesson")
-        gui.button(c, RectF(r.left + 18f * u, r.bottom - 46f * u, r.left + 200f * u, r.bottom - 12f * u), "Entraîner un cheval", size = 12f) { modal = null; app.push(HorsesScreen(app)) }
-        gui.button(c, RectF(r.right - 200f * u, r.bottom - 46f * u, r.right - 18f * u, r.bottom - 12f * u), "Donner le cours", Btn.PRIMARY, enabled = lessonPick.isNotEmpty(), size = 13f) {
-            val res = g.giveLesson(g.owned().filter { it.id in lessonPick })
-            toast(res.msg, res.ok)
-            if (res.ok) { modal = null; app.sound.play(SoundFx.S.COIN) }
+        gui.button(c, RectF(r.left + 18f * u, r.bottom - 46f * u, r.left + 180f * u, r.bottom - 12f * u), "Entraîner un cheval", size = 12f) { modal = null; app.push(HorsesScreen(app)) }
+        if (!lessonAdvanced) {
+            gui.button(c, RectF(r.right - 200f * u, r.bottom - 46f * u, r.right - 18f * u, r.bottom - 12f * u), "Donner le cours", Btn.PRIMARY, enabled = lessonPick.isNotEmpty(), size = 13f) {
+                val res = g.giveLesson(picked)
+                toast(res.msg, res.ok)
+                if (res.ok) { modal = null; app.sound.play(SoundFx.S.COIN) }
+            }
+        } else {
+            gui.button(c, RectF(r.right - 300f * u, r.bottom - 46f * u, r.right - 206f * u, r.bottom - 12f * u), "Rapide", enabled = lessonPick.isNotEmpty(), size = 11f, sub = "sans jouer") {
+                val res = g.giveLesson(picked, advanced = true)
+                toast(res.msg, res.ok)
+                if (res.ok) { modal = null; app.sound.play(SoundFx.S.COIN) }
+            }
+            gui.button(c, RectF(r.right - 200f * u, r.bottom - 46f * u, r.right - 18f * u, r.bottom - 12f * u), "Montrer en selle", Btn.PRIMARY, enabled = lessonPick.isNotEmpty(), size = 13f) {
+                val block = g.lessonBlock(picked, true)
+                if (block != null) toast(block, false)
+                else {
+                    // la démonstration se fait sur le cheval le plus avancé en dressage
+                    val demo = picked.maxByOrNull { it.skill(com.cheval.core.Discipline.DRESSAGE) }!!
+                    modal = null
+                    app.push(RideScreen(app, demo, RideMode(RideKind.DRESSAGE, false, 5, lesson = true), -1, null, picked))
+                }
+            }
         }
     }
 
@@ -524,12 +632,15 @@ class HubScreen(app: GameView) : Screen(app) {
             gui.text(c, (if (done) "✔ " else "○ ") + goal.title, row.left + 10f * u, row.top + 20f * u, 14f, Ink.INK, font = Ink.hand)
             gui.text(c, goal.desc, row.left + 10f * u, row.top + 38f * u, 11f, Ink.INK, maxW = row.width() - 170f * u)
             gui.text(c, "Récompense : ${fmtMoney(goal.reward)}", row.left + 10f * u, row.top + 54f * u, 10f, Pal.LEATHER)
-            gui.button(c, RectF(row.right - 140f * u, row.top + 14f * u, row.right - 10f * u, row.bottom - 14f * u), if (done) "Réclamer" else "En cours…", Btn.PRIMARY, enabled = done, size = 12.5f) {
+            // toucher l'objectif montre où le réaliser
+            gui.hit(row) { showGoal(goal) }
+            if (done) gui.button(c, RectF(row.right - 140f * u, row.top + 14f * u, row.right - 10f * u, row.bottom - 14f * u), "Réclamer", Btn.PRIMARY, size = 12.5f) {
                 val res = g.claimGoal(goal); toast(res.msg, res.ok); if (res.ok) { app.sound.play(SoundFx.S.COIN); app.sound.play(SoundFx.S.GOOD) }
             }
+            else gui.button(c, RectF(row.right - 140f * u, row.top + 14f * u, row.right - 10f * u, row.bottom - 14f * u), "Où ? ➜", Btn.GOLD, size = 12.5f) { showGoal(goal) }
             y += 70f * u
         }
-        gui.text(c, "${g.goalsDone.size}/${Goals.ALL.size} objectifs accomplis", r.left + 18f * u, r.bottom - 14f * u, 10.5f, Ink.INK)
+        gui.text(c, "${g.goalsDone.size}/${Goals.ALL.size} objectifs accomplis · touche un objectif pour savoir où aller", r.left + 18f * u, r.bottom - 14f * u, 10.5f, Ink.INK)
     }
 
     private fun calendarDialog(c: Canvas) {

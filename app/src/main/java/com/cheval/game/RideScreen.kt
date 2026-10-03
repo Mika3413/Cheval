@@ -12,6 +12,7 @@ import com.cheval.core.CompResult
 import com.cheval.core.Discipline
 import com.cheval.core.Exercise
 import com.cheval.core.Game
+import com.cheval.core.HAUTE_ECOLE_MIN
 import com.cheval.core.Horse
 import com.cheval.core.Levels
 import com.cheval.core.LivePerformance
@@ -27,12 +28,17 @@ import kotlin.math.sin
 
 enum class RideKind { BALADE, PLAT, DRESSAGE, OBSTACLES, CROSS, PISTE, HUNTER, TROT, ENDURANCE, WESTERN }
 
-class RideMode(val kind: RideKind, val competition: Boolean, val level: Int = 0, val distance: Int = 0) {
+class RideMode(val kind: RideKind, val competition: Boolean, val level: Int = 0, val distance: Int = 0,
+               /** Séance ou démonstration de haute école : piaffer et passage au programme. */
+               val highSchool: Boolean = false,
+               /** Cours de dressage avancé donné en direct devant les élèves. */
+               val lesson: Boolean = false) {
     companion object {
         fun forExercise(ex: Exercise) = when (ex) {
             Exercise.EXTERIEUR -> RideMode(RideKind.BALADE, false)
             Exercise.FOND -> RideMode(RideKind.ENDURANCE, false, 0)
             Exercise.DRESSAGE -> RideMode(RideKind.DRESSAGE, false, 1)
+            Exercise.HAUTE_ECOLE -> RideMode(RideKind.DRESSAGE, false, 5, highSchool = true)
             Exercise.GYMNASTIQUE -> RideMode(RideKind.OBSTACLES, false, 0)
             Exercise.PARCOURS -> RideMode(RideKind.OBSTACLES, false, 1)
             Exercise.CROSS -> RideMode(RideKind.CROSS, false, 1)
@@ -63,7 +69,8 @@ class RideMode(val kind: RideKind, val competition: Boolean, val level: Int = 0,
  * trot attelé, endurance avec contrôles vétérinaires, barrel race. Le cheval répond selon son niveau,
  * sa forme, sa confiance, son caractère et la précision du cavalier.
  */
-class RideScreen(app: GameView, private val horse: Horse, private val mode: RideMode, private val eventId: Int = -1, private val exercise: Exercise? = null) : Screen(app) {
+class RideScreen(app: GameView, private val horse: Horse, private val mode: RideMode, private val eventId: Int = -1, private val exercise: Exercise? = null,
+                 private val lessonHorses: List<Horse> = emptyList()) : Screen(app) {
     private val game get() = app.game!!
     private val rng = Rng(System.nanoTime())
     private val app2 = app
@@ -115,8 +122,14 @@ class RideScreen(app: GameView, private val horse: Horse, private val mode: Ride
     private var timeAllowed = 0f
 
     // ---------------- dressage : figures et cadence
-    private enum class Fig { GAIT, ARRET, RECULER, ALLONGER }
-    private class Movement(val at: Float, val gait: Int, val fig: Fig, val text: String, val letter: String) { var score = -1f; var holdOk = 0f }
+    private enum class Fig { GAIT, ARRET, RECULER, ALLONGER, PIAFFER, PASSAGE }
+    private class Movement(val at: Float, val gait: Int, val fig: Fig, val text: String, val letter: String) { var score = -1f; var holdOk = 0f; var beats = 0; var regular = 0f }
+    /** Piaffer ou passage demandé (depuis le trot), sinon null. */
+    private var special: Gait? = null
+    /** Aptitude du cheval au rassembler extrême (0..1). */
+    private val highAbility = ((horse.skill(Discipline.DRESSAGE) * 0.6f + horse.pot(Trait.ALLURES) * 0.25f + horse.pot(Trait.FORCE) * 0.15f) / 100f).coerceIn(0f, 1f)
+    private val allowPP = mode.kind == RideKind.DRESSAGE && (mode.highSchool || mode.lesson || (mode.competition && mode.level >= 5) || (!mode.competition && horse.skill(Discipline.DRESSAGE) >= HAUTE_ECOLE_MIN))
+    private var ppBeats = 0
     private val movements = ArrayList<Movement>()
     private var lastGaitChangeAt = 0f
     private var cadence = 60f
@@ -176,7 +189,7 @@ class RideScreen(app: GameView, private val horse: Horse, private val mode: Ride
     private fun intro() = when (mode.kind) {
         RideKind.BALADE -> "Balade libre : accélérez, ralentissez, profitez du paysage. Rentrez quand vous voulez."
         RideKind.PLAT -> "Travail sur le plat : faites les transitions aux lettres et gardez la cadence."
-        RideKind.DRESSAGE -> "Reprise : transitions pile à la lettre, et touchez RYTHME à chaque foulée pour la cadence."
+        RideKind.DRESSAGE -> if (allowPP) "Reprise : au trot, demandez PIAFFER ou PASSAGE à la lettre, et touchez RYTHME à chaque battue." else "Reprise : transitions pile à la lettre, et touchez RYTHME à chaque foulée pour la cadence."
         RideKind.OBSTACLES -> "Abordez chaque obstacle au galop et appuyez sur SAUTER au point de battue (zone verte)."
         RideKind.HUNTER -> "Hunter : galop régulier, battues parfaites. Le style est noté, pas le chrono."
         RideKind.CROSS -> "Cross : gardez un bon galop, sautez au bon moment, attention au gué !"
@@ -213,14 +226,38 @@ class RideScreen(app: GameView, private val horse: Horse, private val mode: Ride
 
     private fun setupDressage() {
         val names = listOf("A", "K", "E", "H", "C", "M", "B", "F")
-        val n = if (mode.kind == RideKind.DRESSAGE) 10 + mode.level else 7
         var x = 30f
         val gaitNames = listOf("arrêt", "pas moyen", "trot de travail", "galop de travail")
+        if (mode.highSchool || mode.lesson) {
+            // reprise de haute école : enchaînements piaffer-passage, comme au Grand Prix
+            val prog = listOf(
+                Triple(Fig.GAIT, 2, "trot de travail"), Triple(Fig.PASSAGE, 2, "passage"), Triple(Fig.PIAFFER, 2, "piaffer, 10 battues"),
+                Triple(Fig.PASSAGE, 2, "passage"), Triple(Fig.ARRET, 0, "arrêt, immobilité 3 s"), Triple(Fig.GAIT, 2, "trot de travail"),
+                Triple(Fig.ALLONGER, 2, "trot allongé (maintenir ALLONGER)"), Triple(Fig.PASSAGE, 2, "passage"), Triple(Fig.PIAFFER, 2, "piaffer, 10 battues"),
+                Triple(Fig.GAIT, 1, "pas moyen"))
+            val list = if (mode.lesson) prog.take(8) + listOf(prog.last()) else prog
+            for ((i, step) in list.withIndex()) {
+                val letter = names[i % names.size]
+                val pre = if (step.first == Fig.PASSAGE || step.first == Fig.ALLONGER) "De" else "En"
+                movements += Movement(x, step.second, step.first, "$pre $letter : ${step.third}", letter)
+                x += when (step.first) { Fig.PIAFFER -> 9f; Fig.PASSAGE, Fig.ALLONGER -> 18f; else -> rng.range(22f, 28f) }
+            }
+            courseLen = x + 15f
+            return
+        }
+        val n = if (mode.kind == RideKind.DRESSAGE) 10 + mode.level else 7
         var prev = 1
+        var ppCount = 0
         for (i in 0 until n) {
             val letter = names[i % names.size]
             val r = rng.float()
             val m = when {
+                // Grand Prix (ou cheval confirmé à l'entraînement) : passage puis piaffer depuis le trot
+                allowPP && prev == 2 && i > 1 && (r < 0.3f || (ppCount < 2 && i >= n - 4)) -> {
+                    ppCount++
+                    if (rng.chance(0.5f)) Movement(x, 2, Fig.PIAFFER, "En $letter : piaffer, 10 battues", letter)
+                    else Movement(x, 2, Fig.PASSAGE, "De $letter : passage", letter)
+                }
                 mode.kind == RideKind.DRESSAGE && i > 1 && r < 0.12f && prev >= 1 -> Movement(x, 0, Fig.ARRET, "En $letter : arrêt, immobilité 3 s", letter)
                 mode.kind == RideKind.DRESSAGE && mode.level >= 1 && i > 2 && r < 0.22f && prev == 0 -> Movement(x, 0, Fig.RECULER, "En $letter : reculer de 4 pas", letter)
                 mode.kind == RideKind.DRESSAGE && r < 0.36f && prev == 2 -> Movement(x, 2, Fig.ALLONGER, "De $letter : trot allongé (maintenir ALLONGER)", letter)
@@ -232,7 +269,7 @@ class RideScreen(app: GameView, private val horse: Horse, private val mode: Ride
             }
             movements += m
             prev = m.gait
-            x += rng.range(24f, 34f)
+            x += when (m.fig) { Fig.PIAFFER -> 9f; Fig.PASSAGE -> 18f; else -> rng.range(24f, 34f) }
         }
         courseLen = x + 15f
     }
@@ -283,6 +320,7 @@ class RideScreen(app: GameView, private val horse: Horse, private val mode: Ride
         if (stamina < 15f && gaitIdx >= 3 && !isTrot) { target = gaitSpeeds[2] + 1f; if (rng.chance(dt * 0.5f)) say("${horse.name} est essoufflé…") }
         if (mode.kind == RideKind.PISTE && gaitIdx == 4) target *= (0.86f + hSkill / 100f * 0.14f) * (1f + push * 0.06f)
         if (extending && gaitIdx == 2) target = 4.6f + hSkill / 100f * 0.8f
+        if (special != null && gaitIdx == 2) target = if (special == Gait.PIAFFER) 0.12f else 1.45f
         if (reinBack > 0f) { target = -0.5f; reinBack -= dt }
         if (turning > 0f) target = 1.2f
         if (spook > 0f) { target = 0f; spook -= dt }
@@ -298,6 +336,7 @@ class RideScreen(app: GameView, private val horse: Horse, private val mode: Ride
         // allure et cadence des membres (le trotteur reste au trot sauf faute d'allure)
         val gait = when {
             isTrot -> if (breakT > 0f) Gait.GALOP else if (v < 0.3f) Gait.ARRET else if (v < 2.2f) Gait.PAS else Gait.TROT
+            special != null && gaitIdx == 2 -> special!!
             v < 0.3f -> Gait.ARRET; v < 2.6f -> Gait.PAS; v < 4.8f -> Gait.TROT; v < 10f -> Gait.GALOP; else -> Gait.GRAND_GALOP
         }
         if (jumpStart < 0f) pose.gait = gait
@@ -308,12 +347,18 @@ class RideScreen(app: GameView, private val horse: Horse, private val mode: Ride
         if (gait != Gait.ARRET && jumpStart < 0f) hoofSounds(oldPhase, pose.phase, gait)
         pose.speedBlend += (((v - 4f) / 10f).coerceIn(0f, 1f) - pose.speedBlend) * dt * 2f
         val collected = mode.kind == RideKind.DRESSAGE || mode.kind == RideKind.PLAT || mode.kind == RideKind.HUNTER
-        pose.neck += ((if (gait == Gait.GRAND_GALOP) 28f else if (gait == Gait.ARRET) 48f else if (collected) 50f else 40f) - pose.neck) * dt * 2f
-        pose.head += ((if (gait == Gait.GRAND_GALOP) 55f else if (collected) 18f else 35f) - pose.head) * dt * 2f
+        val highCollect = gait == Gait.PIAFFER || gait == Gait.PASSAGE
+        pose.neck += ((if (gait == Gait.GRAND_GALOP) 28f else if (gait == Gait.ARRET) 48f else if (highCollect) 56f else if (collected) 50f else 40f) - pose.neck) * dt * 2f
+        pose.head += ((if (gait == Gait.GRAND_GALOP) 55f else if (highCollect) 8f else if (collected) 18f else 35f) - pose.head) * dt * 2f
+        // rassembler en dressage, allonger quand on le demande, amplitude libre ailleurs
+        val collectT = when { gait == Gait.PIAFFER -> 1f; gait == Gait.PASSAGE -> 0.85f; extending && gaitIdx == 2 -> -1f; collected && gait != Gait.ARRET -> 0.35f; gait == Gait.GRAND_GALOP -> -0.5f; else -> 0f }
+        pose.collect += (collectT - pose.collect) * min(1f, dt * 2.5f)
+        pose.tailLift += ((if (highCollect) 0.25f else if (gait == Gait.GALOP || gait == Gait.GRAND_GALOP) 0.15f else 0f) - pose.tailLift) * dt * 2f
         pose.ears = if (jumpFence != null || nextFence()?.let { it.x - dist < 15f } == true) 1f else sin(t * 0.8f) * 0.4f
         pose.tailSwing = sin(t * 2f) * 0.5f
         tack.riderForward += ((if (jumpStart >= 0f || gait == Gait.GRAND_GALOP) 1f else if (gait == Gait.GALOP && !collected) 0.45f else 0f) - tack.riderForward) * dt * 4f
         tack.riderPost = if (gait == Gait.TROT && !collected) (sin(pose.phase * 6.283f * 2f) * 0.5f + 0.5f) else 0f
+        if (highCollect) stamina = (stamina - dt * (if (gait == Gait.PIAFFER) 1.2f else 0.8f)).coerceAtLeast(0f)
         if (mode.kind == RideKind.BALADE && Personality.PEUREUX in horse.personality && spook <= 0f && rng.chance(dt * 0.02f * (1.4f - horse.confidence / 100f))) {
             spook = 1.4f; say("Un faisan s'envole ! ${horse.name} fait un écart."); app.sound.play(SoundFx.S.SNORT)
             horse.confidence = (horse.confidence - 1f).coerceAtLeast(0f)
@@ -458,23 +503,45 @@ class RideScreen(app: GameView, private val horse: Horse, private val mode: Ride
     private fun updateDressage(dt: Float, oldPhase: Float) {
         // cadence : une « foulée » à chaque cycle ; le joueur doit taper dans le rythme
         if (pose.gait != Gait.ARRET && oldPhase > pose.phase) { lastBeat = t; beatFlash = 0.18f; if (rideTime - lastTap > 1.6f) cadence = max(0f, cadence - 3f) }
+        // piaffer et passage : une battue à chaque diagonal posé ; un cheval peu confirmé se désunit
+        val beat = (oldPhase < 0.5f && pose.phase >= 0.5f) || oldPhase > pose.phase
+        if (special != null) {
+            if (gaitIdx != 2) special = null
+            else {
+                if (beat) ppBeats++
+                val breakRate = ((0.62f - highAbility) * 1.3f + (if (stamina < 20f) 0.4f else 0f)) * (if (cadence > 70f) 0.6f else 1f)
+                if (breakRate > 0f && rng.chance(dt * breakRate)) {
+                    val what = if (special == Gait.PIAFFER) "Le piaffer" else "Le passage"
+                    special = null
+                    say("$what se désunit : ${horse.name} repart au trot. Redemandez-le !")
+                    for (m in movements) if (m.score < 0f && (m.fig == Fig.PIAFFER || m.fig == Fig.PASSAGE)) { m.regular -= 1f; break }
+                }
+            }
+        }
         for (m in movements) {
             if (m.score >= 0f) continue
+            if (m.fig == Fig.PIAFFER && abs(dist - m.at) < 4.5f && pose.gait == Gait.PIAFFER && beat) { m.beats++; m.regular += highAbility * 0.6f + cadence / 100f * 0.4f }
+            if (m.fig == Fig.PASSAGE && dist in m.at..(m.at + 12f) && pose.gait == Gait.PASSAGE) m.holdOk += dt
+            if (m.fig == Fig.PASSAGE && dist in m.at..(m.at + 12f) && pose.gait == Gait.PASSAGE && beat) { m.beats++; m.regular += highAbility * 0.6f + cadence / 100f * 0.4f }
             // l'arrêt doit être tenu 3 s autour de la lettre
             if (m.fig == Fig.ARRET && abs(dist - m.at) < 2.5f && v < 0.3f) m.holdOk += dt
             if (m.fig == Fig.RECULER && abs(dist - m.at) < 4f && reinBack > 0f) m.holdOk += dt
             if (m.fig == Fig.ALLONGER && dist in m.at..(m.at + 12f) && extending && gaitIdx == 2) m.holdOk += dt
-            val judgeAt = when (m.fig) { Fig.ALLONGER -> m.at + 12f; else -> m.at + 3f }
-            if (dist > judgeAt || (m.fig == Fig.ARRET && m.holdOk >= 3f)) {
+            val judgeAt = when (m.fig) { Fig.ALLONGER, Fig.PASSAGE -> m.at + 12f; Fig.PIAFFER -> m.at + 4.5f; else -> m.at + 3f }
+            if (dist > judgeAt || (m.fig == Fig.ARRET && m.holdOk >= 3f) || (m.fig == Fig.PIAFFER && m.beats >= 10)) {
                 var s = when (m.fig) {
                     Fig.GAIT -> { val ok = gaitIdx.coerceAtMost(3) == m.gait; val timing = abs(lastGaitChangeAt - m.at); if (!ok) 2f else (10f - (timing - 1.5f).coerceAtLeast(0f) * 1.2f).coerceIn(4f, 10f) }
                     Fig.ARRET -> (m.holdOk / 3f * 10f).coerceIn(1f, 10f)
                     Fig.RECULER -> if (m.holdOk > 0.6f) 8.5f else 2f
                     Fig.ALLONGER -> (m.holdOk / (12f / 4.5f) * 10f).coerceIn(2f, 10f)
+                    // nombre de battues et régularité du diagonal
+                    Fig.PIAFFER -> if (m.beats == 0) 1f else (m.beats.coerceAtMost(10) / 10f * 6f + (m.regular / m.beats).coerceIn(0f, 1f) * 4f).coerceIn(1f, 10f)
+                    Fig.PASSAGE -> if (m.beats == 0) 1f else ((m.holdOk / (12f / 1.45f)).coerceAtMost(1f) * 6f + (m.regular / m.beats).coerceIn(0f, 1f) * 4f).coerceIn(1f, 10f)
                 }
                 s = s * (0.55f + hSkill / 100f * 0.45f) + (rSkill - 50f) / 50f + (horse.confidence - 50f) / 100f
                 m.score = s.coerceIn(0f, 10f)
                 if (m.fig == Fig.ARRET && m.holdOk >= 3f) { dist = max(dist, m.at + 3.2f) }
+                if (m.fig == Fig.PIAFFER && m.beats >= 10) { dist = max(dist, m.at + 4.6f); say("Dix battues ! Rendez la main : passage ou trot.") }
                 say(if (m.score >= 7f) "Bien ! (${"%.1f".format(m.score)})" else "${m.text.substringAfter(": ")} : ${"%.1f".format(m.score)}")
             }
         }
@@ -640,6 +707,11 @@ class RideScreen(app: GameView, private val horse: Horse, private val mode: Ride
             compResult?.let {
                 if (it.rank <= 3) { app.sound.play(SoundFx.S.APPLAUSE); app.sound.play(SoundFx.S.GOOD) } else app.sound.play(SoundFx.S.APPLAUSE, 0.4f)
             }
+        } else if (mode.lesson) {
+            val horses = (lessonHorses + horse).distinctBy { it.id }
+            val r = g.giveLesson(horses, advanced = true, demo = quality.coerceIn(0f, 1.2f))
+            trainMsg = r.msg
+            app.sound.play(if (r.ok) SoundFx.S.COIN else SoundFx.S.BAD, 0.7f)
         } else {
             val ex = exercise ?: Exercise.PLAT
             val minutes = if (mode.kind == RideKind.BALADE) (rideTime / 2f).toInt().coerceIn(15, 150) else ex.minutes
@@ -666,6 +738,7 @@ class RideScreen(app: GameView, private val horse: Horse, private val mode: Ride
         val maxG = if (mode.kind == RideKind.DRESSAGE || mode.kind == RideKind.PLAT || mode.kind == RideKind.HUNTER) 3 else 4
         val n = i.coerceIn(0, maxG)
         if (n != gaitIdx) { gaitIdx = n; gaitChanges++ }
+        special = null
         lastGaitChangeAt = dist
     }
 
@@ -862,11 +935,32 @@ class RideScreen(app: GameView, private val horse: Horse, private val mode: Ride
         } else {
             for (i in 0 until 8) { val tx = i * 180f * u - (camX * 0.3f) % (180f * u); Scenery.tree(c, tx, ground - 30f * u, 90f * u, amb, i) }
             Scenery.fence(c, -((camX) % (60f * u)), w + 60f * u, ground - 16f * u, 22f * u, amb, 60f * u)
+            if (mode.lesson) drawStudents(c, camX, ground - 16f * u, amb)
         }
         Scenery.sand(c, 0f, w, ground - 16f * u, h, amb, scroll = camX)
         // traces dans le sable
         gui.sp.color = Color.argb(30, 0, 0, 0); gui.sp.strokeWidth = 1f * u
         var x = -((camX) % (24f * u)); while (x < w) { c.drawLine(x, ground + 8f * u, x + 10f * u, ground + 20f * u, gui.sp); x += 24f * u }
+    }
+
+    /** Les élèves du cours, casqués, accoudés à la lice pour regarder la démonstration. */
+    private fun drawStudents(c: Canvas, camX: Float, fenceY: Float, amb: com.cheval.game.Ambience) {
+        val u = gui.u; val w = gui.w
+        val span = w + 500f * u
+        val polos = intArrayOf(Color.rgb(196, 60, 60), Color.rgb(60, 110, 170), Color.rgb(230, 180, 60), Color.rgb(90, 150, 90))
+        for (grp in 0..1) {
+            val gx = (((grp * span / 2f - camX * 0.9f) % span) + span) % span - 250f * u
+            for (k in 0..2) {
+                val x = gx + k * 26f * u
+                val bob = sin(t * 1.5f + k + grp) * 1.2f * u
+                gui.p.shader = null
+                gui.p.color = Scenery.lit(Color.rgb(60, 56, 70), amb); c.drawRect(x - 4f * u, fenceY - 10f * u, x + 4f * u, fenceY + 4f * u, gui.p)
+                gui.p.color = Scenery.lit(polos[(grp * 3 + k) % polos.size], amb); c.drawRoundRect(x - 6f * u, fenceY - 30f * u + bob, x + 6f * u, fenceY - 9f * u, 3f * u, 3f * u, gui.p)
+                gui.p.color = Scenery.lit(Color.rgb(232, 196, 170), amb); c.drawCircle(x, fenceY - 36f * u + bob, 5f * u, gui.p)
+                gui.p.color = Scenery.lit(Color.rgb(30, 30, 36), amb); c.drawArc(x - 6f * u, fenceY - 43f * u + bob, x + 6f * u, fenceY - 31f * u + bob, 180f, 180f, true, gui.p)
+                Ink.line(c, x + 5f * u, fenceY - 26f * u + bob, x + 12f * u, fenceY - 20f * u, 2.4f * u, Scenery.lit(polos[(grp * 3 + k) % polos.size], amb))
+            }
+        }
     }
 
     private fun drawCrossBg(c: Canvas, camX: Float, ground: Float, amb: Ambience, ppm: Float) {
@@ -997,6 +1091,10 @@ class RideScreen(app: GameView, private val horse: Horse, private val mode: Ride
                 if (mode.kind == RideKind.DRESSAGE) {
                     gui.button(c, RectF(w - 270f * u, h - 52f * u, w - 186f * u, h - 30f * u), if (extending) "Allonger ✓" else "Allonger", if (extending) Btn.GOLD else Btn.GHOST, size = 10.5f) { extending = !extending }
                     gui.button(c, RectF(w - 270f * u, h - 28f * u, w - 186f * u, h - 6f * u), "Reculer", Btn.GHOST, size = 10.5f) { if (v < 0.5f) { reinBack = 1.2f; say("Reculer : un, deux, trois, quatre…") } else say("Il faut être à l'arrêt pour reculer.") }
+                    if (allowPP) {
+                        gui.button(c, RectF(w - 364f * u, h - 52f * u, w - 276f * u, h - 30f * u), if (special == Gait.PIAFFER) "Piaffer ✓" else "Piaffer", if (special == Gait.PIAFFER) Btn.GOLD else Btn.GHOST, size = 10.5f) { askSpecial(Gait.PIAFFER) }
+                        gui.button(c, RectF(w - 364f * u, h - 28f * u, w - 276f * u, h - 6f * u), if (special == Gait.PASSAGE) "Passage ✓" else "Passage", if (special == Gait.PASSAGE) Btn.GOLD else Btn.GHOST, size = 10.5f) { askSpecial(Gait.PASSAGE) }
+                    }
                 }
             }
             RideKind.BALADE, RideKind.ENDURANCE -> gui.button(c, RectF(w - 170f * u, h - 56f * u, w - 14f * u, h - 10f * u), if (mode.kind == RideKind.BALADE) "Rentrer" else "Abandonner", Btn.GOLD, size = 14f) {
@@ -1004,6 +1102,15 @@ class RideScreen(app: GameView, private val horse: Horse, private val mode: Ride
             }
             RideKind.TROT -> gui.button(c, big, "ENCOURAGER", Btn.PRIMARY, size = 15f, sub = "de la voix") { push = 1f; trotTarget = min(18f, trotTarget + 0.5f) }
         }
+    }
+
+    private fun askSpecial(g: Gait) {
+        if (special == g) { special = null; say("Retour au trot de travail."); return }
+        if (gaitIdx != 2) { say("${g.label} se demande depuis le trot : passez d'abord au trot."); return }
+        if (highAbility < 0.3f) { say("${horse.name} ne connaît pas encore ${if (g == Gait.PIAFFER) "le piaffer" else "le passage"} : travaillez-le en séance de haute école."); return }
+        special = g; extending = false; ppBeats = 0
+        say(if (g == Gait.PIAFFER) "Piaffer : jambes qui accompagnent, main qui contient… il trotte sur place !" else "Passage : un trot suspendu, comme au ralenti.")
+        app.sound.play(SoundFx.S.CLICK, 0.4f)
     }
 
     private fun changeLane(d: Int) {

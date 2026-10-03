@@ -228,4 +228,24 @@ class DayLoopTest {
         org.junit.Assert.assertTrue(Discipline.TROT_ATTELE.potential(trot) > Discipline.TROT_ATTELE.potential(perch) + 15)
         for (d in Discipline.values()) for (l in 0..5) org.junit.Assert.assertTrue(Levels.name(d, l).isNotEmpty())
     }
+
+    @Test
+    fun hauteEcoleEtCoursAvance() {
+        val g = Game(91); g.newGameSetup(withStaff = true)
+        val h = g.starterChoices().first { it.backed }; g.takeStarter(h)
+        h.energy = 90f
+        h.skills[Discipline.DRESSAGE.ordinal] = 20f
+        // le piaffer et le passage demandent un cheval confirmé
+        org.junit.Assert.assertNotNull(g.canTrain(h, Exercise.HAUTE_ECOLE))
+        g.rider.galop = 2
+        org.junit.Assert.assertFalse(g.giveLesson(listOf(h), advanced = true).ok)
+        h.skills[Discipline.DRESSAGE.ordinal] = 60f
+        g.rider.galop = 5
+        g.weather = Weather()
+        org.junit.Assert.assertNull(g.canTrain(h, Exercise.HAUTE_ECOLE))
+        val m0 = g.money
+        val r = g.giveLesson(listOf(h), advanced = true, demo = 1f)
+        org.junit.Assert.assertTrue(r.msg, r.ok)
+        org.junit.Assert.assertTrue(g.money > m0)
+    }
 }

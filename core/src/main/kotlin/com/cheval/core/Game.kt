@@ -28,6 +28,9 @@ class Offer(val horseId: Int, val buyer: String, val amount: Int, val expires: I
  * Partie complète : le domaine, ses chevaux et le monde autour (marché, étalons, concours, météo).
  * Le temps avance heure par heure ; toutes les règles sont ici, l'application ne fait qu'afficher et appeler les actions.
  */
+/** Niveau de dressage à partir duquel un cheval apprend le piaffer et le passage. */
+const val HAUTE_ECOLE_MIN = 45f
+
 class Game(seed: Long, var stableName: String = "Haras de la Baie") {
     var rng = Rng(seed)
     /** Temps écoulé en heures depuis le 1er mars, 0 h, de la première année. */
@@ -142,24 +145,52 @@ class Game(seed: Long, var stableName: String = "Haras de la Baie") {
 
     fun lessonPrice(): Int = 18 + level(BuildingType.CARRIERE) * 4 + level(BuildingType.MANEGE) * 6 + level(BuildingType.CLUB_HOUSE) * 5
 
-    /** Le joueur donne un cours d'équitation avec les chevaux choisis (1 h 30). */
-    fun giveLesson(horses: List<Horse>): Res {
-        if (horses.isEmpty()) return Res.no("Choisissez au moins un cheval.")
-        if (lessonsToday >= 3) return Res.no("Trois cours par jour, c'est déjà beaucoup !")
-        horses.firstOrNull { !it.backed || it.injured || it.energy < 25f || it.place == Place.DEPLACEMENT }?.let { return Res.no("${it.name} ne peut pas travailler (${if (!it.backed) "non débourré" else if (it.injured) "blessé" else "trop fatigué"}).") }
-        if (weather.harsh && level(BuildingType.MANEGE) == 0) return Res.no("Personne ne vient monter par ce temps sans manège couvert.")
+    /** Pourquoi on ne peut pas (encore) donner un cours de dressage avancé, ou null. */
+    fun advancedLessonBlock(horses: List<Horse>): String? = when {
+        rider.galop < 5 -> "Il faut le Galop 5 pour enseigner le dressage avancé."
+        horses.none { it.skill(Discipline.DRESSAGE) >= HAUTE_ECOLE_MIN } -> "Il faut un cheval confirmé en dressage (niveau ${HAUTE_ECOLE_MIN.toInt()}) pour montrer piaffer et passage."
+        else -> null
+    }
+
+    /** Pourquoi le cours ne peut pas avoir lieu, ou null. */
+    fun lessonBlock(horses: List<Horse>, advanced: Boolean): String? {
+        if (horses.isEmpty()) return "Choisissez au moins un cheval."
+        if (lessonsToday >= 3) return "Trois cours par jour, c'est déjà beaucoup !"
+        horses.firstOrNull { !it.backed || it.injured || it.energy < 25f || it.place == Place.DEPLACEMENT }?.let { return "${it.name} ne peut pas travailler (${if (!it.backed) "non débourré" else if (it.injured) "blessé" else "trop fatigué"})." }
+        if (advanced) advancedLessonBlock(horses)?.let { return it }
+        if (weather.harsh && level(BuildingType.MANEGE) == 0) return "Personne ne vient monter par ce temps sans manège couvert."
+        if (hoursLeft() < 1.5f) return "Plus assez de temps aujourd'hui (1 h 30 nécessaire)."
+        return null
+    }
+
+    /**
+     * Le joueur donne un cours d'équitation avec les chevaux choisis (1 h 30).
+     * [advanced] : cours de dressage avancé (piaffer, passage) pour cavaliers confirmés, moins d'élèves mais plus cher.
+     * [demo] : qualité de la démonstration jouée en direct (0..1.2), ou −1 si le cours n'a pas été joué.
+     */
+    fun giveLesson(horses: List<Horse>, advanced: Boolean = false, demo: Float = -1f): Res {
+        lessonBlock(horses, advanced)?.let { return Res.no(it) }
         if (!spend(1.5f)) return Res.no("Plus assez de temps aujourd'hui (1 h 30 nécessaire).")
-        val students = lessonStudents(horses.size)
+        val base = lessonStudents(horses.size)
+        val students = if (advanced) (base / 2).coerceIn(1, 3) else base
         val calm = horses.map { (it.pot(Trait.CALME) + it.confidence) / 2f }.average().toFloat()
-        val satisfaction = (calm / 100f + reputation / 200f).coerceIn(0.2f, 1.2f)
-        val income = (students * lessonPrice() * (0.8f + satisfaction * 0.3f)).toInt()
-        earn(income, "Cours d'équitation ($students élèves)", "Club")
+        val dressage = horses.maxOf { it.skill(Discipline.DRESSAGE) }
+        val show = if (demo >= 0f) demo else 0.55f + dressage / 250f
+        val satisfaction = if (advanced) (show * 0.8f + reputation / 250f).coerceIn(0.2f, 1.2f) else (calm / 100f + reputation / 200f).coerceIn(0.2f, 1.2f)
+        val price = if (advanced) (lessonPrice() * 2.5f).toInt() else lessonPrice()
+        val income = (students * price * (0.8f + satisfaction * 0.3f)).toInt()
+        earn(income, if (advanced) "Cours de dressage avancé ($students élèves)" else "Cours d'équitation ($students élèves)", "Club")
         for (h in horses) { h.energy -= 14f; h.workToday += 60f; h.fitness = min(80f, h.fitness + 0.5f); h.confidence = min(100f, h.confidence + 0.5f) }
         lessonsToday++
         stat(St.LESSON)
         rider.hoursRidden += 0.5f
         reputation = (reputation + 0.25f * satisfaction).coerceAtMost(100f)
         val mood = when { satisfaction > 0.9f -> "ravis"; satisfaction > 0.6f -> "contents"; else -> "un peu déçus" }
+        if (advanced) {
+            for (h in horses) h.skills[Discipline.DRESSAGE.ordinal] = min(h.skillCap(Discipline.DRESSAGE, day), h.skills[Discipline.DRESSAGE.ordinal] + 0.15f)
+            reputation = (reputation + 0.3f * satisfaction).coerceAtMost(100f)
+            return Res.ok("Cours de dressage avancé : $students élèves $mood par le piaffer et le passage, ${fmtMoney(income)} encaissés.")
+        }
         return Res.ok("$students élèves, $mood : ${fmtMoney(income)} encaissés.")
     }
 
@@ -660,6 +691,7 @@ class Game(seed: Long, var stableName: String = "Haras de la Baie") {
             ex == Exercise.MANIPULATION && h.handling >= 100f -> "Déjà parfaitement manipulé"
             ex == Exercise.DEBOURRAGE && h.backed -> "Déjà débourré"
             ex.ridden && !h.backed -> "Il faut d'abord le débourrer"
+            ex == Exercise.HAUTE_ECOLE && h.skill(Discipline.DRESSAGE) < HAUTE_ECOLE_MIN -> "Cheval pas encore assez confirmé en dressage (niveau ${HAUTE_ECOLE_MIN.toInt()})"
             h.pregnancy != null && h.pregnancy!!.dueDay - day < 90 && ex.ridden -> "Jument en fin de gestation : pas de travail monté"
             h.sessionsToday >= 2 -> "Assez travaillé pour aujourd'hui"
             h.energy < 12f -> "${h.name} est épuisé"

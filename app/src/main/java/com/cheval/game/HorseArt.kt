@@ -20,6 +20,7 @@ import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.max
 import kotlin.math.min
+import kotlin.math.pow
 import kotlin.math.sin
 import kotlin.math.sqrt
 
@@ -41,7 +42,14 @@ enum class Gait(
     PAS("Pas", floatArrayOf(0.25f, 0f, 0.75f, 0.5f), 0.62f, 0.62f, 0.95f, 0.1f, 0.08f, 0.012f, 0.6f, 5f),
     TROT("Trot", floatArrayOf(0f, 0.5f, 0.5f, 0f), 0.42f, 0.6f, 1.35f, 0.2f, 0.15f, 0.03f, 0.8f, 1f),
     GALOP("Galop", floatArrayOf(0.45f, 0.25f, 0.25f, 0f), 0.36f, 0.7f, 1.65f, 0.22f, 0.17f, 0.045f, 4.5f, 8f),
-    GRAND_GALOP("Grand galop", floatArrayOf(0.42f, 0.12f, 0.3f, 0f), 0.27f, 0.9f, 2.2f, 0.26f, 0.2f, 0.035f, 3.5f, 7f);
+    GRAND_GALOP("Grand galop", floatArrayOf(0.42f, 0.12f, 0.3f, 0f), 0.27f, 0.9f, 2.2f, 0.26f, 0.2f, 0.035f, 3.5f, 7f),
+    /** Trot sur place, très rassemblé : avant-bras à l'horizontale, hanches abaissées. */
+    PIAFFER("Piaffer", floatArrayOf(0f, 0.5f, 0.5f, 0f), 0.56f, 0.035f, 1.0f, 0.3f, 0.15f, 0.022f, 0.4f, 0.6f),
+    /** Trot rassemblé et très cadencé, avec un long temps de suspension. */
+    PASSAGE("Passage", floatArrayOf(0f, 0.5f, 0.5f, 0f), 0.36f, 0.32f, 0.92f, 0.33f, 0.2f, 0.048f, 0.6f, 0.8f);
+
+    /** Allure diagonale (deux battues par foulée). */
+    val diagonal get() = this == TROT || this == PIAFFER || this == PASSAGE
 
     /** Vitesse (hauteurs au garrot par seconde) sans glissement des sabots. */
     val speed get() = if (this == ARRET) 0f else stride / duty * freq
@@ -71,8 +79,10 @@ class HorsePose {
     var lift = 0f
     /** Lèvre supérieure qui s'allonge et remue (plaisir quand on gratte le garrot). */
     var lip = 0f
+    /** Rassembler (1 : très rassemblé, hanches basses) ou allonger (−1 : amplitude maximale). */
+    var collect = 0f
 
-    fun copyFrom(o: HorsePose) { gait = o.gait; phase = o.phase; neck = o.neck; head = o.head; ears = o.ears; tailSwing = o.tailSwing; tailLift = o.tailLift; blink = o.blink; jump = o.jump; jumpHeight = o.jumpHeight; breathe = o.breathe; speedBlend = o.speedBlend; lie = o.lie; liftLeg = o.liftLeg; lift = o.lift; lip = o.lip }
+    fun copyFrom(o: HorsePose) { gait = o.gait; phase = o.phase; neck = o.neck; head = o.head; ears = o.ears; tailSwing = o.tailSwing; tailLift = o.tailLift; blink = o.blink; jump = o.jump; jumpHeight = o.jumpHeight; breathe = o.breathe; speedBlend = o.speedBlend; lie = o.lie; liftLeg = o.liftLeg; lift = o.lift; lip = o.lip; collect = o.collect }
 }
 
 /** Ce qu'il faut savoir d'un cheval pour le dessiner. */
@@ -241,7 +251,7 @@ object HorseArt {
         val ph = pose.phase
         val tw = (2 * PI * ph).toFloat()
         var bob = when (g) {
-            Gait.PAS, Gait.TROT -> -abs(sin(tw)) * g.bob * H + g.bob * H * 0.5f
+            Gait.PAS, Gait.TROT, Gait.PIAFFER, Gait.PASSAGE -> -abs(sin(tw)) * g.bob * H + g.bob * H * 0.5f
             Gait.ARRET -> sin(pose.breathe * 2f * PI.toFloat()) * g.bob * H
             else -> sin(tw) * g.bob * H
         }
@@ -259,6 +269,9 @@ object HorseArt {
             }
             bob = 0f
         }
+        // rassembler : l'avant se relève, les hanches s'abaissent
+        val col = pose.collect.coerceIn(-1f, 1f)
+        if (jt < 0f) pitchDeg -= 2.6f * col.coerceAtLeast(0f) + (if (g == Gait.PIAFFER) 2f else 0f)
         val pr = Math.toRadians(pitchDeg.toDouble()).toFloat()
         cosP = cos(pr); sinP = sin(pr)
         pivotY = -H * 0.7f
@@ -287,22 +300,36 @@ object HorseArt {
             val jy = if (lg.front) elbowY else hipJY
             val depthOff = if (lg.near) 0f else -H * 0.035f
             lg.top.set(bx(jx + depthOff, jy), by(jx + depthOff, jy))
-            val restX = (if (lg.front) L * 0.33f else -L * 0.44f) + depthOff + (if (!lg.near && g == Gait.ARRET) H * 0.04f * (if (lg.front) -1f else 1f) else 0f)
+            // engagement : rassemblés, les postérieurs viennent sous la masse
+            val engage = (if (lg.front) -0.015f else 0.07f) * H * (col.coerceAtLeast(0f) + (if (g == Gait.PIAFFER) 0.6f else 0f))
+            val restX = (if (lg.front) L * 0.33f else -L * 0.44f) + depthOff + engage + (if (!lg.near && g == Gait.ARRET) H * 0.04f * (if (lg.front) -1f else 1f) else 0f)
             var hx: Float; var hy: Float
             var stanceNow = true
             var swingT = 0f
+            var breakover = 0f
             if (g == Gait.ARRET) { hx = restX; hy = 0f }
             else {
                 val p = ((ph - g.offsets[i]) % 1f + 1f) % 1f
-                val st = g.stride * H
-                if (p < g.duty) { hx = restX + st * (0.5f - p / g.duty); hy = 0f }
-                else {
+                // amplitude : réduite en rassembler, maximale en allongé
+                val st = g.stride * H * (1f - 0.3f * col)
+                if (p < g.duty) {
+                    hx = restX + st * (0.5f - p / g.duty); hy = 0f
+                    // bascule du pied : les talons se lèvent juste avant le départ du membre
+                    breakover = ((p / g.duty - 0.82f) / 0.18f).coerceIn(0f, 1f)
+                } else {
                     stanceNow = false
                     val t = (p - g.duty) / (1f - g.duty)
                     swingT = t
-                    val e = t * t * (3 - 2 * t)
+                    // pli du genou ou du jarret : le sabot monte d'abord sous le corps, puis se projette vers l'avant
+                    val delay = if (g == Gait.PIAFFER) 0f else if (lg.front) 0.2f else 0.12f
+                    val tt = ((t - delay) / (1f - delay)).coerceIn(0f, 1f)
+                    val e = tt * tt * (3 - 2 * tt)
                     hx = restX + st * (-0.5f + e)
-                    hy = -(if (lg.front) g.liftFront else g.liftHind) * H * sin(PI.toFloat() * t)
+                    val lift = (if (lg.front) g.liftFront else g.liftHind) * (1f + 0.35f * col.coerceAtLeast(0f) + 0.15f * (-col).coerceAtLeast(0f))
+                    // pic de hauteur au premier tiers du soutien, puis le membre s'étend vers le sol
+                    hy = -lift * H * sin(PI.toFloat() * t.toDouble().pow(0.75).toFloat())
+                    // allongé : l'antérieur se déplie loin devant avant de se poser
+                    if (lg.front && col < 0f) hx += H * 0.06f * (-col) * sin(PI.toFloat() * t) * t
                 }
             }
             if (jt >= 0f) {
@@ -345,7 +372,7 @@ object HorseArt {
             }
             lg.stance = stanceNow
             // Paturon : incliné à ~55° en appui, fléchi pendant le soutien
-            val pasternAng = if (stanceNow) -122f else (-122f + 95f * sin(PI.toFloat() * swingT))
+            val pasternAng = if (stanceNow) -122f + 40f * breakover else (-122f + 95f * sin(PI.toFloat() * swingT))
             val pa = Math.toRadians(pasternAng.toDouble()).toFloat()
             lg.cor.set(hx, hy - hoofH)
             lg.fet.set(lg.cor.x + cos(pa) * pastern, lg.cor.y + sin(pa) * pastern)
@@ -407,7 +434,7 @@ object HorseArt {
         hpx = pollX; hpy = pollY; hdx = sin(hAng); hdy = cos(hAng); hnx = cos(hAng); hny = -sin(hAng); hL = a.headLen
         val npx = -sin(nAng - pr); val npy = -cos(nAng - pr) // normale « dessus de l'encolure » en coordonnées écran
         val ndx = cos(nAng - pr); val ndy = -sin(nAng - pr)
-        val crestH = H * (0.025f + a.m.neckArch * 0.045f + (if (a.stallion) 0.03f else 0f)) * (1f - a.foal * 0.6f) * (0.8f + muscle * 0.3f)
+        val crestH = H * (0.025f + a.m.neckArch * 0.045f + (if (a.stallion) 0.03f else 0f) + 0.025f * col.coerceAtLeast(0f)) * (1f - a.foal * 0.6f) * (0.8f + muscle * 0.3f)
         val bcx = bx(ncx, ncy); val bcy = by(ncx, ncy)
         val nl = a.neckLen
         // crête : du garrot à la nuque
@@ -821,7 +848,9 @@ object HorseArt {
         val dockAng = Math.toRadians((200.0 - 55.0 * lift)).toFloat()   // vers l'arrière
         val dockL = H * 0.12f
         val dx = x0 + cos(dockAng) * dockL; val dy = y0 - sin(dockAng) * dockL * -1f + H * 0.04f
-        val sway = pose.tailSwing * H * 0.06f
+        val tailBeats = if (pose.gait == Gait.PAS || pose.gait.diagonal) 2f else 1f
+        val tailBounce = if (pose.gait == Gait.ARRET || pose.jump >= 0f) 0f else sin(pose.phase * 6.283f * tailBeats - 1.6f) * H * 0.025f * (pose.gait.bob / 0.03f).coerceAtMost(1.6f)
+        val sway = pose.tailSwing * H * 0.06f + tailBounce
         val ex = dx - len * (0.12f + wind * 0.65f) + sway; val ey = dy + len * (1f - wind * 0.55f - lift * 0.15f)
         val w0 = H * 0.045f; val w1 = H * (0.075f + a.m.maneLength * 0.04f)
         tailM[0] = dx; tailM[1] = dy; tailM[2] = ex; tailM[3] = ey
@@ -906,7 +935,10 @@ object HorseArt {
             val l = len * taper * (0.85f + r.float() * 0.3f)
             val wave = sin(pose.phase * 12.566f + i * 0.9f) * wind * l * 0.15f
             val tx = xs[i] - wind * l * 0.8f + wave + l * 0.08f
-            val ty = ys[i] + l * (1f - wind * 0.55f) - npy * 0f
+            // les crins rebondissent avec un léger retard sur chaque battue
+            val beats = if (pose.gait == Gait.PAS || pose.gait.diagonal) 2f else 1f
+            val bounce = if (pose.gait == Gait.ARRET || pose.jump >= 0f) 0f else sin(pose.phase * 6.283f * beats - 1.2f - t * 0.8f) * l * 0.16f * (pose.gait.bob / 0.03f).coerceAtMost(1.6f)
+            val ty = ys[i] + l * (1f - wind * 0.55f) + bounce
             tmp.quadTo(prevX, prevY, (prevX + tx) / 2f, (prevY + ty) / 2f)
             prevX = tx; prevY = ty
         }

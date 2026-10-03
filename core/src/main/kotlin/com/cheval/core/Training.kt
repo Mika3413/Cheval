@@ -23,6 +23,8 @@ enum class Exercise(
         "Transitions, cercles, incurvation : la base de tout."),
     DRESSAGE("Reprise de dressage", 50, mapOf(Discipline.DRESSAGE to 1.7f, Discipline.COMPLET to 0.3f), 1.5f, 26f, 0.003f, 4f, true, BuildingType.CARRIERE,
         "Figures de la reprise, appuyers, changements de pied, rassembler."),
+    HAUTE_ECOLE("Haute école : piaffer et passage", 40, mapOf(Discipline.DRESSAGE to 2.1f), 1.5f, 30f, 0.004f, 6f, true, BuildingType.CARRIERE,
+        "Le rassembler extrême : piaffer sur place et passage cadencé, le sommet du dressage."),
     GYMNASTIQUE("Gymnastique à l'obstacle", 40, mapOf(Discipline.CSO to 1.3f, Discipline.COMPLET to 0.5f, Discipline.HUNTER to 1.1f), 1.8f, 28f, 0.006f, 4f, true, BuildingType.CARRIERE,
         "Lignes de cavalettis et de petits sauts : technique et respect."),
     PARCOURS("Parcours d'obstacles", 40, mapOf(Discipline.CSO to 1.7f, Discipline.COMPLET to 0.4f, Discipline.HUNTER to 1.2f), 2f, 34f, 0.009f, 4f, true, BuildingType.CARRIERE,

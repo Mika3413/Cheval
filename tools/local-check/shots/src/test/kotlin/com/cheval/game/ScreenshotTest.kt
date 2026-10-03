@@ -85,6 +85,14 @@ class ScreenshotTest {
         view.stepForTest(6f)
         save(view, "04_domaine")
         val hub = view.screen
+        run {
+            val m = HubScreen::class.java.getDeclaredMethod("showGoal", com.cheval.core.Goal::class.java); m.isAccessible = true
+            m.invoke(hub, com.cheval.core.Goals.ALL.first { it.id == "menage" }); view.stepForTest(1.2f)
+            save(view, "04b_objectif_ou")
+            m.invoke(hub, com.cheval.core.Goals.ALL.first { it.id == "equipe" }); view.stepForTest(1.2f)
+            save(view, "04c_objectif_bouton")
+            val fg = HubScreen::class.java.getDeclaredField("guide"); fg.isAccessible = true; fg.set(hub, null)
+        }
         val fCam = HubScreen::class.java.getDeclaredField("camX"); fCam.isAccessible = true
         fCam.setFloat(hub, 1600f); view.stepForTest(0.5f)
         save(view, "05_domaine_paddocks")
@@ -130,6 +138,16 @@ class ScreenshotTest {
         ride(RideMode(RideKind.OBSTACLES, true, 2), Exercise.PARCOURS, 3, 2f, "10_cso")
         ride(RideMode(RideKind.PISTE, true, 3, 1600), Exercise.GALOP, 4, 5f, "11_course")
         ride(RideMode(RideKind.DRESSAGE, true, 2), Exercise.DRESSAGE, 2, 3f, "12_dressage")
+        run {
+            hz.skills[com.cheval.core.Discipline.DRESSAGE.ordinal] = 72f
+            view.push(RideScreen(view, hz, RideMode.forExercise(Exercise.HAUTE_ECOLE), -1, Exercise.HAUTE_ECOLE))
+            val rs = view.screen as RideScreen
+            view.stepForTest(4f); fGait.setInt(rs, 2); view.stepForTest(2f)
+            val fSp = RideScreen::class.java.getDeclaredField("special"); fSp.isAccessible = true
+            fSp.set(rs, Gait.PASSAGE); view.stepForTest(2.3f); save(view, "12f_passage")
+            fSp.set(rs, Gait.PIAFFER); view.stepForTest(2.1f); save(view, "12g_piaffer")
+            view.pop()
+        }
         ride(RideMode(RideKind.TROT, true, 3, 2100), Exercise.SULKY, 2, 5f, "12b_trot_attele")
         ride(RideMode(RideKind.ENDURANCE, true, 1), Exercise.FOND, 3, 4f, "12c_endurance")
         ride(RideMode(RideKind.WESTERN, true, 1), Exercise.WESTERN, 4, 2f, "12d_barrel")
